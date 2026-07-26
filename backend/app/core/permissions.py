@@ -108,6 +108,18 @@ VENDOR_ROLE_PERMISSIONS: Dict[str, Set[str]] = {
         perm(VendorModule.APPOINTMENTS.value, Action.VIEW),
         perm(VendorModule.NOTIFICATIONS.value, Action.VIEW),
     },
+    # The counter/desk role: runs the call board (start/pause a queue, call,
+    # serve, skip, transfer tokens) and checks appointments into it. No
+    # access to billing, staff, settings or other back-office modules.
+    "controller": {
+        perm(VendorModule.DASHBOARD.value, Action.VIEW),
+        perm(VendorModule.QUEUES.value, Action.VIEW),
+        perm(VendorModule.QUEUES.value, Action.CREATE),
+        perm(VendorModule.QUEUES.value, Action.UPDATE),
+        perm(VendorModule.APPOINTMENTS.value, Action.VIEW),
+        perm(VendorModule.APPOINTMENTS.value, Action.UPDATE),
+        perm(VendorModule.NOTIFICATIONS.value, Action.VIEW),
+    },
 }
 
 # --- Platform-side role presets ----------------------------------------------

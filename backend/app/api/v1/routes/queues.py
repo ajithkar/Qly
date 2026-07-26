@@ -54,6 +54,17 @@ async def create_queue(
     return ok(await QueueService(db).create_queue(tenant_id, payload.model_dump(), staff["id"]))
 
 
+# Static path - must stay ahead of the generic `/{queue_id}` GET below, or
+# FastAPI would match "overview" as a queue_id.
+@router.get("/overview")
+async def queues_overview(
+    tenant_id: str = Depends(get_tenant_id),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(_view),
+) -> Dict[str, Any]:
+    return ok(await QueueService(db).queues_overview(tenant_id))
+
+
 # ------------------------------------------------- specific token actions
 # Declared before the generic handlers so they are matched first.
 @router.post("/tokens/{token_id}/transfer")

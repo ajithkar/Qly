@@ -6,6 +6,7 @@ import {
 import { ListOrdered, ArrowRight } from 'lucide-react';
 
 import { queues } from '@/api/endpoints';
+import { useAuth } from '@/auth/AuthContext';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -13,8 +14,19 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { SkeletonRows } from '@/components/ui/Spinner';
 import { Table } from '@/components/ui/Table';
+import ControllerDashboard from './ControllerDashboard';
 
 export default function VendorDashboard() {
+  const { principal } = useAuth();
+
+  // The controller role's whole job is running the counter, so it gets a
+  // queue-operations board here instead of the owner-facing business summary.
+  if (principal?.role === 'controller') return <ControllerDashboard />;
+
+  return <BusinessDashboard />;
+}
+
+function BusinessDashboard() {
   const queuesQuery = useQuery({
     queryKey: ['queues', { page: 1 }],
     queryFn: () => queues.list({ page: 1, page_size: 10 }),

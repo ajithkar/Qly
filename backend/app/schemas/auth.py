@@ -55,7 +55,7 @@ class ResetPasswordRequest(BaseModel):
 class StaffInviteRequest(BaseModel):
     email: EmailStr
     name: str = Field(..., min_length=2, max_length=120)
-    role: str = Field(..., pattern="^(manager|receptionist|provider|assistant)$")
+    role: str = Field(..., pattern="^(manager|receptionist|provider|assistant|controller)$")
     branch_id: Optional[str] = None
     custom_permissions: List[str] = Field(default_factory=list)
 

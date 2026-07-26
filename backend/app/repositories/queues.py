@@ -50,6 +50,21 @@ class QueueRepository(BaseRepository):
             tenant_id,
         )
 
+    async def list_active(self, tenant_id: str, limit: int = 100) -> List[dict]:
+        """Non-closed queues for the controller overview board, open queues first."""
+        cursor = (
+            self.collection.find(
+                {
+                    "tenant_id": tenant_id,
+                    "is_deleted": False,
+                    "status": {"$ne": QueueStatus.CLOSED.value},
+                }
+            )
+            .sort([("status", 1), ("name", 1)])
+            .limit(limit)
+        )
+        return [serialize(doc) for doc in await cursor.to_list(length=limit)]
+
     async def set_status(
         self,
         queue_id: str,

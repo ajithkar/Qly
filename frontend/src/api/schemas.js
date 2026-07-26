@@ -87,6 +87,18 @@ export const liveMonitor = z.object({
   updated_at: z.string(),
 });
 
+export const queueOverviewItem = z.object({
+  queue_id: z.string(),
+  name: z.string(),
+  status: z.enum(['draft', 'open', 'paused', 'closed']),
+  waiting_count: z.number(),
+  serving_count: z.number(),
+  current_token: z.object({
+    token_number: z.string(),
+    customer_name: z.string().nullish(),
+  }).nullish(),
+});
+
 export const queue = z.object({
   id: z.string(),
   name: z.string(),

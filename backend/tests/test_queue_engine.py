@@ -214,3 +214,27 @@ async def test_live_monitor_reports_accurate_counts(db, tenant_id, seeded):
     assert monitor["completed_count"] == 1
     assert monitor["next_token"] is not None
     assert monitor["status"] == "open"
+
+
+# --------------------------------------------------- controller's overview
+async def test_queues_overview_reports_one_row_per_active_queue(db, tenant_id, seeded):
+    """The controller dashboard's board: waiting/serving counts, no closed queues."""
+    service = QueueService(db)
+    queue_id = seeded["queue"]["id"]
+    await service.issue_token(tenant_id, queue_id, customer_name="Guest")
+    await service.call_next(tenant_id, queue_id, "operator")
+
+    rows = await service.queues_overview(tenant_id)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["queue_id"] == queue_id
+    assert row["waiting_count"] == 0
+    assert row["serving_count"] == 0
+    assert row["current_token"]["customer_name"] == "Guest"
+
+
+async def test_queues_overview_excludes_closed_queues(db, tenant_id, seeded):
+    service = QueueService(db)
+    await service.change_queue_status(tenant_id, seeded["queue"]["id"], "close", "actor")
+    rows = await service.queues_overview(tenant_id)
+    assert rows == []

@@ -35,3 +35,14 @@ def test_unknown_role_grants_nothing():
 
 def test_end_users_have_no_vendor_permissions():
     assert resolve_permissions("user", "") == set()
+
+
+def test_controller_can_run_queues_but_not_back_office():
+    controller = resolve_permissions("staff", "controller")
+    assert perm(VendorModule.QUEUES.value, Action.VIEW) in controller
+    assert perm(VendorModule.QUEUES.value, Action.UPDATE) in controller
+    assert perm(VendorModule.QUEUES.value, Action.CREATE) in controller
+    assert perm(VendorModule.APPOINTMENTS.value, Action.UPDATE) in controller
+    assert perm(VendorModule.BILLING.value, Action.VIEW) not in controller
+    assert perm(VendorModule.STAFF.value, Action.VIEW) not in controller
+    assert perm(VendorModule.SETTINGS.value, Action.VIEW) not in controller

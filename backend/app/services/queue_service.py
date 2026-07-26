@@ -427,6 +427,35 @@ class QueueService:
             "updated_at": utcnow(),
         }
 
+    async def queues_overview(self, tenant_id: str) -> List[dict]:
+        """One row per active queue, for the controller's at-a-glance board.
+
+        Deliberately lighter than `live_monitor`: no ETA calculation (which
+        needs a per-service rolling average), since this runs once per queue
+        for potentially dozens of queues on a single screen.
+        """
+        active_queues = await self.queues.list_active(tenant_id)
+        rows: List[dict] = []
+        for queue in active_queues:
+            counts = await self.tokens.status_counts(queue["id"])
+            current = await self.tokens.current_active(queue["id"])
+            rows.append(
+                {
+                    "queue_id": queue["id"],
+                    "name": queue["name"],
+                    "status": queue["status"],
+                    "waiting_count": counts.get(TokenStatus.WAITING.value, 0),
+                    "serving_count": counts.get(TokenStatus.SERVING.value, 0),
+                    "current_token": {
+                        "token_number": current["token_number"],
+                        "customer_name": current.get("customer_name"),
+                    }
+                    if current
+                    else None,
+                }
+            )
+        return rows
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------

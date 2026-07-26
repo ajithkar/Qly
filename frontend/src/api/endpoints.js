@@ -61,6 +61,7 @@ export const services = {
 // --- queues -------------------------------------------------------------
 export const queues = {
   list: (params) => requestPage({ url: '/vendor/queues', params }, s.queue),
+  overview: () => request({ url: '/vendor/queues/overview' }, z.array(s.queueOverviewItem)),
   get: (id) => request({ url: `/vendor/queues/${id}` }, s.queue),
   create: (data) => request({ url: '/vendor/queues', method: 'POST', data }, s.queue),
   monitor: (id) => request({ url: `/vendor/queues/${id}/monitor` }, s.liveMonitor),
