@@ -12,6 +12,10 @@ import { ApiError } from '@/api/client';
 import Landing from '@/pages/public/Landing';
 import Login from '@/pages/public/Login';
 
+const Register = lazy(() => import('@/pages/public/Register'));
+const ForgotPassword = lazy(() => import('@/pages/public/ForgotPassword'));
+const ResetPassword = lazy(() => import('@/pages/public/ResetPassword'));
+
 // Route-level code splitting: the operator console and its charts never load
 // for someone who only wants to check their place in a queue.
 const VendorLayout = lazy(() => import('@/components/layout/VendorLayout'));
@@ -68,6 +72,9 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<Landing />} />
                   <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/find" element={<FindPlaces />} />
                   <Route path="/track/:tokenId" element={<TrackToken />} />
                   <Route path="/auth/google/callback" element={<GoogleCallback />} />
