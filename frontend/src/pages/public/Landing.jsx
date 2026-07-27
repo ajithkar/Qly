@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, QrCode, Bell, Clock } from 'lucide-react';
+import logoMark from '@/assets/logo-mark.png';
 import { Button } from '@/components/ui/Button';
 import { CallBoard } from '@/components/CallBoard';
 import { useTheme } from '@/hooks/useTheme';
@@ -15,7 +16,10 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-paper">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <span className="font-mono text-sm font-bold tracking-tight">Qly</span>
+        <span className="flex items-center gap-2">
+          <img src={logoMark} alt="" className="h-6 w-6" aria-hidden="true" />
+          <span className="font-mono text-sm font-bold tracking-tight">Qly</span>
+        </span>
         <nav className="flex items-center gap-2">
           <button
             onClick={toggle}

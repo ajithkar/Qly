@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 
+import logoMark from '@/assets/logo-mark.png';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody } from '@/components/ui/Card';
@@ -37,7 +38,8 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm">
-        <Link to="/" className="mb-6 block text-center font-mono text-sm font-bold">
+        <Link to="/" className="mb-6 flex items-center justify-center gap-2 font-mono text-sm font-bold">
+          <img src={logoMark} alt="" className="h-7 w-7" aria-hidden="true" />
           Qly
         </Link>
         <Card>

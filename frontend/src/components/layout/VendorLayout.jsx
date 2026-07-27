@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ListOrdered, CalendarDays, Users, Package,
-  Building2, CreditCard, Menu, X, Moon, Sun, LogOut, MonitorPlay,
+  Building2, CreditCard, Menu, X, Moon, Sun, LogOut,
 } from 'lucide-react';
 
+import logoMark from '@/assets/logo-mark.png';
 import { useAuth } from '@/auth/AuthContext';
 import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/Button';
@@ -46,7 +47,7 @@ export default function VendorLayout() {
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div className="flex items-center gap-2">
-            <MonitorPlay className="h-5 w-5 text-signal" aria-hidden="true" />
+            <img src={logoMark} alt="" className="h-6 w-6" aria-hidden="true" />
             <span className="font-mono text-sm font-bold tracking-tight">Qly</span>
           </div>
           <button
