@@ -31,6 +31,9 @@ export const auth = {
       s.tokenPair.extend({ user: z.object({ id: z.string(), name: z.string().nullish() }) })),
   adminLogin: (body) =>
     request({ url: '/admin/auth/login', method: 'POST', data: body }, s.tokenPair),
+  /** Redeems a shared Operator Console one-time code. */
+  consoleAccess: (body) =>
+    request({ url: '/auth/console-access', method: 'POST', data: body }, s.tokenPair),
 };
 
 // --- vendor catalog -----------------------------------------------------
@@ -66,9 +69,11 @@ export const queues = {
   monitor: (id) => request({ url: `/vendor/queues/${id}/monitor` }, s.liveMonitor),
   tokens: (id, params) =>
     requestPage({ url: `/vendor/queues/${id}/tokens`, params }, s.queueToken),
-  /** action: start | pause | resume | close */
-  lifecycle: (id, action) =>
-    request({ url: `/vendor/queues/${id}/${action}`, method: 'POST' }, s.queue),
+  /** action: start | pause | resume | close. `data.provider_id` assigns the
+   * doctor for `start` - only that doctor (or an owner/manager) can then use
+   * the queue's Operator Console. */
+  lifecycle: (id, action, data) =>
+    request({ url: `/vendor/queues/${id}/${action}`, method: 'POST', data }, s.queue),
   callNext: (id) =>
     request({ url: `/vendor/queues/${id}/call-next`, method: 'POST' }, s.queueToken),
   walkIn: (id, data) =>
@@ -82,6 +87,16 @@ export const queues = {
       method: 'POST',
       data: { target_queue_id },
     }, s.queueToken),
+  /** One-time code + link for the assigned doctor to open this console. */
+  shareConsole: (id) =>
+    request({ url: `/vendor/queues/${id}/console/share`, method: 'POST' },
+      z.object({
+        queue_id: z.string(),
+        queue_name: z.string(),
+        doctor_name: z.string(),
+        code: z.string(),
+        expires_at: z.string(),
+      })),
 };
 
 // --- appointments -------------------------------------------------------
@@ -101,16 +116,28 @@ export const appointments = {
 };
 
 // --- end user -----------------------------------------------------------
+const vendorProfile = z.object({
+  id: z.string(),
+  company_name: z.string().nullish(),
+  slug: z.string().nullish(),
+  business_type: z.string().nullish(),
+  logo_url: z.string().nullish(),
+});
+
 export const discovery = {
-  vendors: (params) =>
-    requestPage({ url: '/vendors', params },
-      z.object({
+  vendors: (params) => requestPage({ url: '/vendors', params }, vendorProfile),
+  vendor: (tenantId) => request({ url: `/vendors/${tenantId}` }, vendorProfile),
+  branches: (tenantId) =>
+    request({ url: `/vendors/${tenantId}/branches` },
+      z.array(z.object({
         id: z.string(),
-        company_name: z.string().nullish(),
-        slug: z.string().nullish(),
-        business_type: z.string().nullish(),
-        logo_url: z.string().nullish(),
-      })),
+        name: z.string(),
+        phone: z.string().nullish(),
+        address: z.object({
+          line1: z.string().nullish(),
+          city: z.string().nullish(),
+        }).nullish(),
+      }))),
   services: (tenantId, branch_id) =>
     request({ url: `/vendors/${tenantId}/services`, params: { branch_id } },
       z.array(z.object({
@@ -171,6 +198,18 @@ export const admin = {
 
   vendors: (params) => requestPage({ url: '/admin/vendors', params }, s.adminVendor),
   vendor: (id) => request({ url: `/admin/vendors/${id}` }, s.adminVendorDetail),
+  /** Vendor stays 'pending' until they pay via the returned checkout_url. */
+  createVendor: (data) =>
+    request({ url: '/admin/vendors', method: 'POST', data },
+      s.adminVendor.extend({ checkout_url: z.string(), checkout_session_id: z.string() })),
+  /** A fresh payment link, in case the first one expired unused. */
+  vendorCheckout: (id) =>
+    request({ url: `/admin/vendors/${id}/checkout`, method: 'POST' },
+      z.object({ checkout_url: z.string(), checkout_session_id: z.string() })),
+  /** Only populated for a short window after the vendor's payment activates them. */
+  vendorCredentials: (id) =>
+    request({ url: `/admin/vendors/${id}/credentials` },
+      z.object({ email: z.string(), password: z.string() })),
   suspendVendor: (id) =>
     request({ url: `/admin/vendors/${id}/suspend`, method: 'POST' }, s.adminVendor),
   reactivateVendor: (id) =>

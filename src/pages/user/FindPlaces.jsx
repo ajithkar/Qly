@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Search, Store, User as UserIcon } from 'lucide-react';
 
-import { auth, discovery } from '@/api/endpoints';
+import { discovery } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
+import { signInWithGoogle } from '@/auth/pendingJoin';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -19,15 +20,6 @@ export default function FindPlaces() {
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [coords, setCoords] = useState(null);
-
-  const signInWithGoogle = async () => {
-    try {
-      const { authorization_url: url } = await auth.googleLoginUrl();
-      window.location.href = url;
-    } catch (error) {
-      toast.error(error.message ?? 'Google sign-in is not available right now.');
-    }
-  };
 
   const query = useQuery({
     queryKey: ['discover', { search, coords }],
@@ -69,7 +61,7 @@ export default function FindPlaces() {
               </Button>
             </Link>
           ) : (
-            <Button variant="secondary" size="sm" onClick={signInWithGoogle}>
+            <Button variant="secondary" size="sm" onClick={() => signInWithGoogle(toast)}>
               Sign in with Google
             </Button>
           )
@@ -111,14 +103,16 @@ export default function FindPlaces() {
               </div>
             )}
             {query.data.data.map((vendor) => (
-              <Card key={vendor.id}>
-                <CardBody>
-                  <h2 className="text-sm font-semibold">{vendor.company_name}</h2>
-                  <p className="mt-0.5 text-sm text-muted">
-                    {vendor.business_type || 'Service provider'}
-                  </p>
-                </CardBody>
-              </Card>
+              <Link key={vendor.id} to={`/vendors/${vendor.id}`}>
+                <Card className="transition-colors hover:border-signal/40">
+                  <CardBody>
+                    <h2 className="text-sm font-semibold">{vendor.company_name}</h2>
+                    <p className="mt-0.5 text-sm text-muted">
+                      {vendor.business_type || 'Service provider'}
+                    </p>
+                  </CardBody>
+                </Card>
+              </Link>
             ))}
           </div>
         )}
