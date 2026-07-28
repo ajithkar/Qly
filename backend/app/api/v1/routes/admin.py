@@ -5,6 +5,7 @@ explicitly guarded by an admin permission; nothing falls back to tenant scope.
 """
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -22,9 +23,13 @@ from app.repositories.catalog import (
 )
 from app.repositories.identity import TenantRepository, UserRepository
 from app.repositories.queues import QueueRepository, TokenRepository
+from app.schemas.auth import AdminVendorCreateRequest
 from app.schemas.billing import PlanCreate, PlanUpdate
 from app.schemas.common import PaginationParams, ok, pagination_params, paginate
 from app.services.audit_service import AuditService
+from app.services.auth_service import AuthService
+from app.services.stripe_client import get_stripe_client
+from app.services.stripe_service import StripeService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -134,6 +139,68 @@ async def vendor_profile(
             },
         }
     )
+
+
+@router.post("/vendors", status_code=status.HTTP_201_CREATED)
+async def create_vendor(
+    payload: AdminVendorCreateRequest,
+    request: Request,
+    admin: Dict[str, Any] = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(require_permission(AdminModule.VENDORS.value, Action.CREATE)),
+) -> Dict[str, Any]:
+    tenant = await AuthService(db).create_vendor_by_admin(payload.model_dump())
+    checkout = await StripeService(db, get_stripe_client()).create_checkout_session(
+        tenant["id"], payload.plan_code, payload.billing_cycle
+    )
+    await AuditService(db).record(
+        tenant_id=tenant["id"],
+        actor_id=admin["id"],
+        actor_email=admin.get("email"),
+        action="create_vendor",
+        module="admin_vendors",
+        resource_id=tenant["id"],
+        updated_value={"company_name": tenant.get("company_name"), "plan_code": tenant.get("plan_code")},
+        ip=client_ip(request),
+    )
+    return ok({**tenant, "checkout_url": checkout["checkout_url"], "checkout_session_id": checkout["session_id"]})
+
+
+@router.post("/vendors/{tenant_id}/checkout", status_code=status.HTTP_201_CREATED)
+async def regenerate_vendor_checkout(
+    tenant_id: str,
+    admin: Dict[str, Any] = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(require_permission(AdminModule.VENDORS.value, Action.UPDATE)),
+) -> Dict[str, Any]:
+    """A fresh payment link - Stripe Checkout Sessions expire, and the
+    vendor's first one may have gone stale before they got to it."""
+    tenant = await TenantRepository(db).get_by_id(tenant_id)
+    if not tenant:
+        raise NotFound("Vendor not found.")
+    checkout = await StripeService(db, get_stripe_client()).create_checkout_session(
+        tenant_id, tenant["plan_code"], "monthly"
+    )
+    return ok({"checkout_url": checkout["checkout_url"], "checkout_session_id": checkout["session_id"]})
+
+
+@router.get("/vendors/{tenant_id}/credentials")
+async def vendor_credentials(
+    tenant_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(require_permission(AdminModule.VENDORS.value, Action.VIEW)),
+) -> Dict[str, Any]:
+    """The owner's generated login email + password, viewable for a short
+    window after payment activates the account - the same credentials that
+    were emailed to them."""
+    from app.db.redis_client import get_redis
+
+    raw = await get_redis().get(f"vendor_credentials:{tenant_id}")
+    if not raw:
+        raise NotFound(
+            "No credentials available - the vendor hasn't paid yet, or this has expired."
+        )
+    return ok(json.loads(raw))
 
 
 @router.post("/vendors/{tenant_id}/suspend")

@@ -8,7 +8,7 @@ Responsibilities:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -16,8 +16,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.config import settings
 from app.core.errors import Conflict, InvalidTransition, NotFound, ValidationError
 from app.core.logging import get_logger
-from app.core.security import ensure_utc, utcnow
+from app.core.security import ensure_utc, generate_numeric_code, hash_opaque_token, utcnow
 from app.models.enums import (
+    AccountStatus,
     QueueStatus,
     TokenPriority,
     TokenStatus,
@@ -28,11 +29,19 @@ from app.repositories.catalog import (
     ProviderRepository,
     ServiceRepository,
 )
-from app.repositories.queues import CounterRepository, QueueRepository, TokenRepository
+from app.repositories.identity import StaffRepository
+from app.repositories.queues import (
+    ConsoleAccessRepository,
+    CounterRepository,
+    QueueRepository,
+    TokenRepository,
+)
 from app.services.notification_service import NotificationService
 from app.websocket.manager import ws_manager
 
 logger = get_logger(__name__)
+
+CONSOLE_CODE_TTL_MINUTES = 30
 
 
 def business_day_for(tz_name: str, moment: Optional[datetime] = None) -> str:
@@ -56,6 +65,8 @@ class QueueService:
         self.services = ServiceRepository(db)
         self.branches = BranchRepository(db)
         self.providers = ProviderRepository(db)
+        self.staff = StaffRepository(db)
+        self.console_access = ConsoleAccessRepository(db)
         self.notifications = NotificationService(db)
 
     # ------------------------------------------------------------------
@@ -96,7 +107,13 @@ class QueueService:
         )
 
     async def change_queue_status(
-        self, tenant_id: str, queue_id: str, action: str, actor_id: str
+        self,
+        tenant_id: str,
+        queue_id: str,
+        action: str,
+        actor_id: str,
+        *,
+        provider_id: Optional[str] = None,
     ) -> dict:
         transitions = {
             "start": (QueueStatus.OPEN, [QueueStatus.DRAFT, QueueStatus.PAUSED]),
@@ -108,8 +125,19 @@ class QueueService:
             raise ValidationError(f"Unknown queue action '{action}'.")
         target, allowed = transitions[action]
 
+        extra_fields = None
+        if action == "start" and provider_id:
+            if not await self.providers.get_by_id(provider_id, tenant_id):
+                raise NotFound("Selected doctor/provider does not exist.")
+            extra_fields = {"provider_id": provider_id}
+
         updated = await self.queues.set_status(
-            queue_id, tenant_id, new_status=target, allowed_from=allowed, actor_id=actor_id
+            queue_id,
+            tenant_id,
+            new_status=target,
+            allowed_from=allowed,
+            actor_id=actor_id,
+            extra_fields=extra_fields,
         )
         if updated is None:
             current = await self.queues.get_by_id(queue_id, tenant_id)
@@ -122,6 +150,57 @@ class QueueService:
         await self._broadcast(tenant_id, queue_id)
         await self.notifications.queue_status_changed(tenant_id, queue_id, target.value)
         return updated
+
+    async def create_console_share(self, tenant_id: str, queue_id: str, actor_id: str) -> dict:
+        """A one-time code an owner/manager hands to the assigned doctor so
+        they can log in and open this queue's console - just their name and
+        the code, no account setup. The doctor never needs a password: a
+        console-only login record is created the first time their catalog
+        Provider is shared, and it is only ever reachable through this code."""
+        queue = await self.queues.get_by_id(queue_id, tenant_id)
+        if not queue:
+            raise NotFound("Queue not found.")
+        provider_id = queue.get("provider_id")
+        if not provider_id:
+            raise ValidationError(
+                "Assign a doctor to this queue (Start it) before sharing console access."
+            )
+
+        staff = await self.staff.get_by_provider_id(tenant_id, provider_id)
+        if not staff:
+            provider = await self.providers.get_by_id(provider_id, tenant_id)
+            if not provider:
+                raise NotFound("Selected doctor/provider does not exist.")
+            staff = await self.staff.create(
+                {
+                    "email": f"provider-{provider_id}@console.local",
+                    "name": provider["name"],
+                    "role": "provider",
+                    "branch_id": provider.get("branch_id"),
+                    "provider_id": provider_id,
+                    "custom_permissions": [],
+                    "status": AccountStatus.ACTIVE.value,
+                    "email_verified": True,
+                    # No password - this login is reachable only via a
+                    # console share code, never via /auth/login.
+                    "password_hash": None,
+                },
+                tenant_id,
+                actor_id,
+            )
+
+        raw_code = generate_numeric_code()
+        expires_at = utcnow() + timedelta(minutes=CONSOLE_CODE_TTL_MINUTES)
+        await self.console_access.create_code(
+            tenant_id, queue_id, staff["id"], hash_opaque_token(raw_code), expires_at, actor_id
+        )
+        return {
+            "queue_id": queue_id,
+            "queue_name": queue["name"],
+            "doctor_name": staff["name"],
+            "code": raw_code,
+            "expires_at": expires_at,
+        }
 
     # ------------------------------------------------------------------
     # Token issuing

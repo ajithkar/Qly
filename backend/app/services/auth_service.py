@@ -33,6 +33,7 @@ from app.repositories.identity import (
     TenantRepository,
     UserRepository,
 )
+from app.repositories.queues import ConsoleAccessRepository
 
 logger = get_logger(__name__)
 
@@ -54,6 +55,7 @@ class AuthService:
         self.admins = AdminRepository(db)
         self.refresh = RefreshTokenRepository(db)
         self.plans = PlanRepository(db)
+        self.console_access = ConsoleAccessRepository(db)
 
     # ------------------------------------------------------------------
     # Vendor registration & login
@@ -126,6 +128,60 @@ class AuthService:
             "verification_token": raw_verification,
         }
 
+    async def create_vendor_by_admin(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Super Admin onboarding: creates the tenant and owner, but both stay
+        pending until the vendor completes the Stripe Checkout payment the
+        caller generates right after this. The owner has no password yet -
+        one is generated and emailed once the webhook confirms payment (see
+        `StripeService._provision_owner_if_pending`)."""
+        email = payload["email"].lower()
+
+        if await self.tenants.get_by_email(email):
+            raise Conflict("An account with that email already exists.", code="email_taken")
+        if await self.staff.get_by_email_any_tenant(email):
+            raise Conflict("An account with that email already exists.", code="email_taken")
+
+        plan = await self.plans.get_by_code(payload["plan_code"])
+        if not plan:
+            raise NotFound("Selected plan does not exist.")
+
+        base = slugify(payload["company_name"])
+        slug, suffix = base, 1
+        while await self.tenants.get_by_slug(slug):
+            slug = f"{base}-{suffix}"
+            suffix += 1
+
+        tenant = await self.tenants.create(
+            {
+                "company_name": payload["company_name"],
+                "slug": slug,
+                "owner_email": email,
+                "owner_name": payload["owner_name"],
+                "timezone": payload.get("timezone", "UTC"),
+                "currency": payload.get("currency", "USD"),
+                "language": "en",
+                "status": TenantStatus.PENDING.value,
+                "plan_code": plan["code"],
+            }
+        )
+
+        await self.staff.create(
+            {
+                "email": email,
+                "name": payload["owner_name"],
+                "password_hash": None,
+                "role": "owner",
+                "branch_id": None,
+                "custom_permissions": [],
+                "status": AccountStatus.PENDING.value,
+                "email_verified": False,
+            },
+            tenant["id"],
+        )
+
+        logger.info("vendor_created_by_admin", extra={"tenant_id": tenant["id"]})
+        return tenant
+
     async def verify_email(self, raw_token: str) -> dict:
         staff = await self.staff.get_by_verification_token(raw_token)
         if not staff:
@@ -157,6 +213,28 @@ class AuthService:
             raise AuthenticationError(
                 "This organisation is suspended.", code="tenant_suspended"
             )
+
+        tokens = await self._issue_tokens(
+            subject=staff["id"],
+            principal_type=PrincipalType.STAFF.value,
+            tenant_id=staff["tenant_id"],
+            role=staff["role"],
+        )
+        return staff, tokens
+
+    async def login_via_console_code(self, queue_id: str, code: str) -> Tuple[dict, dict]:
+        """Passwordless entry point for a shared Operator Console code.
+
+        The code is single-use and tied to one queue; `consume` claims it
+        atomically so a leaked/guessed code cannot be replayed even if two
+        requests race."""
+        record = await self.console_access.consume(queue_id, hash_opaque_token(code))
+        if not record:
+            raise AuthenticationError("That code is invalid or has expired.", code="invalid_code")
+
+        staff = await self.staff.get_by_id_any_tenant(record["staff_id"])
+        if not staff or staff.get("status") == AccountStatus.SUSPENDED.value:
+            raise AuthenticationError("This account is no longer available.")
 
         tokens = await self._issue_tokens(
             subject=staff["id"],
@@ -201,6 +279,7 @@ class AuthService:
                 "name": payload["name"],
                 "role": payload["role"],
                 "branch_id": payload.get("branch_id"),
+                "provider_id": payload.get("provider_id"),
                 "custom_permissions": payload.get("custom_permissions", []),
                 "status": AccountStatus.PENDING.value,
                 "email_verified": False,
@@ -376,6 +455,7 @@ class AuthService:
             "role": principal.get("role"),
             "tenant_id": principal.get("tenant_id"),
             "branch_id": principal.get("branch_id"),
+            "provider_id": principal.get("provider_id"),
             "permissions": permissions,
             "status": principal.get("status", AccountStatus.ACTIVE.value),
         }

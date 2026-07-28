@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CheckCircle2, PhoneCall, Pause, Play, Plus,
-  SkipForward, UserX, Radio, RadioTower,
+  CheckCircle2, ChevronLeft, LogOut, PhoneCall, Pause, Play, Plus,
+  ShieldAlert, SkipForward, UserX, Radio, RadioTower,
 } from 'lucide-react';
 
 import { queues } from '@/api/endpoints';
@@ -36,10 +36,16 @@ import { formatMinutes, formatTime } from '@/lib/cn';
  */
 export default function OperatorConsole() {
   const { queueId } = useParams();
-  const { principal } = useAuth();
+  const { principal, logout } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [walkInOpen, setWalkInOpen] = useState(false);
+
+  const signOut = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   const tenantId = principal?.tenant_id;
 
@@ -151,8 +157,29 @@ export default function OperatorConsole() {
   }, [callNext]);
 
   if (monitorQuery.isLoading) return <FullPageSpinner label="Opening the console" />;
+
   if (monitorQuery.isError) {
-    return <ErrorState error={monitorQuery.error} onRetry={monitorQuery.refetch} />;
+    const forbidden = monitorQuery.error?.status === 403;
+    return (
+      <ConsoleShell onSignOut={signOut}>
+        {forbidden ? (
+          <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+            <div className="rounded-full border border-amber/25 bg-amber/10 p-3">
+              <ShieldAlert className="h-5 w-5 text-amber" aria-hidden="true" />
+            </div>
+            <h3 className="mt-4 text-sm font-semibold">Not your queue</h3>
+            <p className="mt-1 max-w-sm text-sm text-muted">
+              {monitorQuery.error.message}
+            </p>
+            <Link to="/vendor/queues" className="mt-5">
+              <Button variant="secondary" size="sm">Back to queues</Button>
+            </Link>
+          </div>
+        ) : (
+          <ErrorState error={monitorQuery.error} onRetry={monitorQuery.refetch} />
+        )}
+      </ConsoleShell>
+    );
   }
 
   const monitor = monitorQuery.data;
@@ -163,7 +190,7 @@ export default function OperatorConsole() {
   );
 
   return (
-    <div className="space-y-5">
+    <ConsoleShell onSignOut={signOut}>
       {/* Header: queue state and lifecycle controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -349,9 +376,36 @@ export default function OperatorConsole() {
         onSubmit={(data) => walkIn.mutate(data)}
         loading={walkIn.isPending}
       />
+    </ConsoleShell>
+  );
+}
+
+/** Standalone shell: this page is deliberately kept outside VendorLayout
+ * (no sidebar/nav) so it can be handed to a doctor as a dedicated screen. */
+function ConsoleShell({ children, onSignOut }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-paper">
+      <header className="flex items-center justify-between border-b border-line bg-surface px-4 py-3">
+        <Link to="/vendor/queues" className="flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          Queues
+        </Link>
+        <Button variant="ghost" size="sm" onClick={onSignOut}>
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          Sign out
+        </Button>
+      </header>
+      <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <div className="space-y-5">{children}</div>
+      </main>
     </div>
   );
 }
+
+ConsoleShell.propTypes = {
+  children: PropTypes.node,
+  onSignOut: PropTypes.func.isRequired,
+};
 
 function WalkInDialog({ open, onClose, onSubmit, loading }) {
   const nameRef = useRef(null);

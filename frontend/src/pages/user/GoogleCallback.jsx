@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 
-import { auth } from '@/api/endpoints';
+import { auth, me } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
+import { PENDING_JOIN_KEY } from '@/auth/pendingJoin';
 import { Card, CardBody } from '@/components/ui/Card';
 import { FullPageSpinner } from '@/components/ui/Spinner';
 
@@ -15,7 +16,7 @@ export default function GoogleCallback() {
   const { adoptTokens } = useAuth();
   const [searchParams] = useSearchParams();
   const [error, setError] = useState(null);
-  const [done, setDone] = useState(false);
+  const [redirectTo, setRedirectTo] = useState(null);
   const ran = useRef(false);
 
   useEffect(() => {
@@ -37,11 +38,25 @@ export default function GoogleCallback() {
 
     auth.googleCallback({ code, state })
       .then((pair) => adoptTokens(pair))
-      .then(() => setDone(true))
+      .then(async () => {
+        // Resume a "join this queue" intent stashed before the redirect to
+        // Google, so picking a service isn't lost by needing to sign in.
+        const raw = localStorage.getItem(PENDING_JOIN_KEY);
+        localStorage.removeItem(PENDING_JOIN_KEY);
+        if (!raw) return '/profile';
+        try {
+          const { tenantId, branchId, serviceId } = JSON.parse(raw);
+          const token = await me.joinQueue(tenantId, { service_id: serviceId, branch_id: branchId });
+          return `/track/${token.id}`;
+        } catch {
+          return '/profile';
+        }
+      })
+      .then((to) => setRedirectTo(to))
       .catch((err) => setError(err.message ?? 'Could not complete sign-in.'));
   }, [searchParams, adoptTokens]);
 
-  if (done) return <Navigate to="/profile" replace />;
+  if (redirectTo) return <Navigate to={redirectTo} replace />;
 
   if (error) {
     return (

@@ -58,6 +58,7 @@ class QueueRepository(BaseRepository):
         new_status: QueueStatus,
         allowed_from: Sequence[QueueStatus],
         actor_id: Optional[str] = None,
+        extra_fields: Optional[dict] = None,
     ) -> Optional[dict]:
         """Guarded queue status change; returns None if the guard failed."""
         doc = await self.collection.find_one_and_update(
@@ -67,7 +68,51 @@ class QueueRepository(BaseRepository):
                 "is_deleted": False,
                 "status": {"$in": [s.value for s in allowed_from]},
             },
-            {"$set": {"status": new_status.value, **touch(actor_id)}},
+            {"$set": {"status": new_status.value, **(extra_fields or {}), **touch(actor_id)}},
+            return_document=True,
+        )
+        return serialize(doc)
+
+
+class ConsoleAccessRepository(BaseRepository):
+    """One-time codes that let a doctor log in and open a specific queue's
+    Operator Console without typing their real password - handed out by an
+    owner/manager, single-use, short-lived."""
+
+    collection_name = "console_access_codes"
+    soft_delete = False
+
+    async def create_code(
+        self,
+        tenant_id: str,
+        queue_id: str,
+        staff_id: str,
+        code_hash: str,
+        expires_at,
+        actor_id: str,
+    ) -> dict:
+        return await self.create(
+            {
+                "queue_id": queue_id,
+                "staff_id": staff_id,
+                "code_hash": code_hash,
+                "expires_at": expires_at,
+                "used_at": None,
+            },
+            tenant_id,
+            actor_id,
+        )
+
+    async def consume(self, queue_id: str, code_hash: str) -> Optional[dict]:
+        """Atomically claim a code: only the first, valid, unused match wins."""
+        doc = await self.collection.find_one_and_update(
+            {
+                "queue_id": queue_id,
+                "code_hash": code_hash,
+                "used_at": None,
+                "expires_at": {"$gt": utcnow()},
+            },
+            {"$set": {"used_at": utcnow()}},
             return_document=True,
         )
         return serialize(doc)
