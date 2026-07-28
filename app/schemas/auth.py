@@ -19,6 +19,27 @@ class VendorRegisterRequest(BaseModel):
     accepted_privacy_version: str = Field(..., max_length=20)
 
 
+class AdminVendorCreateRequest(BaseModel):
+    """Super Admin onboarding a vendor directly. The tenant stays pending
+    until the vendor completes the generated Stripe Checkout payment - the
+    owner's password is generated then, not set here."""
+
+    company_name: str = Field(..., min_length=2, max_length=120)
+    owner_name: str = Field(..., min_length=2, max_length=120)
+    email: EmailStr
+    plan_code: str = Field(..., min_length=2, max_length=40)
+    timezone: str = Field(default="UTC", max_length=64)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    billing_cycle: str = Field(default="monthly", pattern="^(monthly|yearly)$")
+
+
+class ConsoleAccessRequest(BaseModel):
+    """Redeems a one-time Operator Console share code."""
+
+    queue_id: str
+    code: str = Field(..., min_length=6, max_length=6)
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1, max_length=128)
@@ -57,6 +78,10 @@ class StaffInviteRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=120)
     role: str = Field(..., pattern="^(manager|receptionist|provider|assistant)$")
     branch_id: Optional[str] = None
+    # Links this login to a catalog Provider (e.g. a specific doctor) so the
+    # Operator Console can be restricted to the provider assigned to a queue.
+    # Only meaningful when role == "provider".
+    provider_id: Optional[str] = None
     custom_permissions: List[str] = Field(default_factory=list)
 
 
@@ -91,5 +116,6 @@ class PrincipalResponse(BaseModel):
     role: Optional[str] = None
     tenant_id: Optional[str] = None
     branch_id: Optional[str] = None
+    provider_id: Optional[str] = None
     permissions: List[str] = Field(default_factory=list)
     status: str

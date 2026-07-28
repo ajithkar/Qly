@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import time
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
@@ -21,13 +23,18 @@ from pymongo.errors import DuplicateKeyError
 from app.core.config import settings
 from app.core.errors import AppError, Conflict, NotFound, ValidationError
 from app.core.logging import get_logger
-from app.core.security import utcnow
+from app.core.security import generate_temp_password, hash_password, utcnow
 from app.models.base import to_object_id
-from app.models.enums import TenantStatus
+from app.models.enums import AccountStatus, TenantStatus
 from app.repositories.catalog import PlanRepository, SubscriptionRepository
-from app.repositories.identity import TenantRepository
+from app.repositories.identity import StaffRepository, TenantRepository
+from app.services.email_service import send_email
 
 logger = get_logger(__name__)
+
+# How long an admin can view a freshly-activated vendor's generated
+# password from the admin UI before it disappears from Redis.
+VENDOR_CREDENTIALS_TTL_SECONDS = 60 * 60 * 24
 
 
 class WebhookVerificationError(AppError):
@@ -51,6 +58,7 @@ class StripeService:
         self.tenants = TenantRepository(db)
         self.plans = PlanRepository(db)
         self.subscriptions = SubscriptionRepository(db)
+        self.staff = StaffRepository(db)
         self._client = client
 
     # ------------------------------------------------------------------
@@ -344,6 +352,53 @@ class StripeService:
         logger.info(
             "subscription_activated",
             extra={"tenant_id": tenant_id, "plan_code": plan_code},
+        )
+        await self._provision_owner_if_pending(tenant_id)
+
+    async def _provision_owner_if_pending(self, tenant_id: str) -> None:
+        """Vendors created directly by an admin have no password until
+        payment succeeds - this is the moment that generates one, emails it
+        to the owner, and stashes it in Redis briefly so an admin can also
+        copy it manually. Self-registered vendors already chose their own
+        password at sign-up, so `password_hash` is already set for them and
+        this is a no-op."""
+        owner = await self.staff.find_one(
+            {"role": "owner", "password_hash": None}, tenant_id
+        )
+        if not owner:
+            return
+
+        raw_password = generate_temp_password()
+        await self.staff.update(
+            owner["id"],
+            {
+                "password_hash": hash_password(raw_password),
+                "status": AccountStatus.ACTIVE.value,
+                "email_verified": True,
+            },
+            tenant_id,
+        )
+
+        try:
+            from app.db.redis_client import get_redis
+
+            await get_redis().set(
+                f"vendor_credentials:{tenant_id}",
+                json.dumps({"email": owner["email"], "password": raw_password}),
+                ex=VENDOR_CREDENTIALS_TTL_SECONDS,
+            )
+        except Exception:  # noqa: BLE001 - caching must never block activation
+            logger.warning("vendor_credentials_cache_failed", extra={"tenant_id": tenant_id})
+
+        origin = urlparse(settings.STRIPE_SUCCESS_URL)
+        login_url = f"{origin.scheme}://{origin.netloc}/login"
+        await send_email(
+            owner["email"],
+            "Your Qly vendor account is ready",
+            "Your payment was received and your Qly account is now active.\n\n"
+            f"Login email: {owner['email']}\n"
+            f"Temporary password: {raw_password}\n\n"
+            f"Sign in at {login_url} and change your password after your first sign-in.",
         )
 
     # ------------------------------------------------------------------

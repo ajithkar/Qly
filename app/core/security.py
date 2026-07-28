@@ -88,6 +88,21 @@ def hash_opaque_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def generate_numeric_code(length: int = 6) -> str:
+    """A short code a person can read aloud or retype - console share OTPs."""
+    return "".join(str(secrets.randbelow(10)) for _ in range(length))
+
+
+_PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def generate_temp_password(length: int = 14) -> str:
+    """A random password for a vendor whose payment just activated their
+    account. Excludes visually-ambiguous characters (0/O, 1/l/I) since a
+    human may need to retype it from an email."""
+    return "".join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(length))
+
+
 # --------------------------------------------------------------------------
 # JWT
 # --------------------------------------------------------------------------

@@ -2,18 +2,19 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Header, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.api.deps import get_current_staff, get_db, get_tenant_id, require_permission
+from app.core.config import settings
 from app.core.errors import ValidationError
 from app.core.logging import get_logger
 from app.core.permissions import Action, VendorModule
 from app.schemas.billing import CheckoutRequest
 from app.schemas.common import ok
+from app.services.stripe_client import get_stripe_client
 from app.services.stripe_service import StripeService, WebhookVerificationError
 
 logger = get_logger(__name__)
@@ -39,7 +40,7 @@ async def create_checkout(
     """Returns a Checkout URL. Landing on the success page does NOT activate
     anything - only the webhook does."""
     return ok(
-        await StripeService(db).create_checkout_session(
+        await StripeService(db, get_stripe_client()).create_checkout_session(
             tenant_id, payload.plan_code, payload.billing_cycle
         )
     )
@@ -51,7 +52,7 @@ async def cancel_subscription(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _: Dict[str, Any] = Depends(require_permission(VendorModule.BILLING.value, Action.UPDATE)),
 ) -> Dict[str, Any]:
-    return ok(await StripeService(db).cancel_subscription(tenant_id))
+    return ok(await StripeService(db, get_stripe_client()).cancel_subscription(tenant_id))
 
 
 @router.post("/webhooks/stripe")
@@ -66,7 +67,7 @@ async def stripe_webhook(
     and break signature verification.
     """
     raw_body = await request.body()
-    secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    secret = settings.STRIPE_WEBHOOK_SECRET
     if not secret:
         logger.error("stripe_webhook_secret_missing")
         raise WebhookVerificationError("Webhook secret is not configured.")

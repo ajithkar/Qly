@@ -62,6 +62,21 @@ class Settings(BaseSettings):
     ETA_ROLLING_WINDOW: int = 20  # completions used for rolling avg service time
     ETA_MIN_SAMPLES: int = 3  # below this, fall back to service duration
 
+    # --- Stripe ---
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_SUCCESS_URL: str = "http://localhost:5173/billing/success"
+    STRIPE_CANCEL_URL: str = "http://localhost:5173/billing/cancel"
+
+    # --- SMTP (vendor credential emails) ---
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "Qly"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, v):

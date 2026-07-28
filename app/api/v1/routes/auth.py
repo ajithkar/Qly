@@ -17,6 +17,7 @@ from app.core.rate_limit import auth_rate_limit, login_guard
 from app.schemas.auth import (
     AcceptInviteRequest,
     AdminLoginRequest,
+    ConsoleAccessRequest,
     EmailVerificationRequest,
     ForgotPasswordRequest,
     LoginRequest,
@@ -80,6 +81,32 @@ async def login(
         actor_email=staff["email"],
         action="login",
         module="auth",
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return ok(tokens)
+
+
+@router.post("/auth/console-access")
+async def console_access(
+    payload: ConsoleAccessRequest,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: None = Depends(auth_rate_limit),
+) -> Dict[str, Any]:
+    """Redeem a shared Operator Console code - a passwordless login scoped to
+    whichever doctor the code was generated for."""
+    async with login_guard(f"console:{payload.queue_id}"):
+        staff, tokens = await AuthService(db).login_via_console_code(
+            payload.queue_id, payload.code
+        )
+    await AuditService(db).record(
+        tenant_id=staff["tenant_id"],
+        actor_id=staff["id"],
+        actor_email=staff["email"],
+        action="console_otp_login",
+        module="auth",
+        resource_id=payload.queue_id,
         ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )

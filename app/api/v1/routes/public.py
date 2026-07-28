@@ -9,6 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.api.deps import get_current_user, get_db
 from app.core.errors import Conflict, NotFound
 from app.core.rate_limit import default_rate_limit
+from app.models.base import serialize
 from app.repositories.catalog import BranchRepository, ServiceRepository
 from app.repositories.identity import TenantRepository
 from app.repositories.queues import QueueRepository, TokenRepository
@@ -51,6 +52,51 @@ async def discover_vendors(
         for t in items
     ]
     return paginate(public_fields, total, params)
+
+
+@router.get("/vendors/{tenant_id}")
+async def vendor_profile(
+    tenant_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: None = Depends(default_rate_limit),
+) -> Dict[str, Any]:
+    """Public vendor profile - just enough to head a booking page."""
+    tenant = await TenantRepository(db).get_by_id(tenant_id)
+    if not tenant or tenant.get("status") != "active":
+        raise NotFound("Vendor not found.")
+    return ok(
+        {
+            "id": tenant["id"],
+            "company_name": tenant.get("company_name"),
+            "slug": tenant.get("slug"),
+            "business_type": tenant.get("business_type"),
+            "logo_url": tenant.get("logo_url"),
+        }
+    )
+
+
+@router.get("/vendors/{tenant_id}/branches")
+async def vendor_branches(
+    tenant_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: None = Depends(default_rate_limit),
+) -> Dict[str, Any]:
+    """Branches a customer can pick from before choosing a service."""
+    docs = await BranchRepository(db).collection.find(
+        {"tenant_id": tenant_id, "is_deleted": False}
+    ).to_list(length=200)
+    items = [serialize(doc) for doc in docs]
+    return ok(
+        [
+            {
+                "id": b["id"],
+                "name": b.get("name"),
+                "phone": b.get("phone"),
+                "address": b.get("address"),
+            }
+            for b in items
+        ]
+    )
 
 
 @router.get("/vendors/{tenant_id}/services")
