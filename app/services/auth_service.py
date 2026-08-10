@@ -34,6 +34,7 @@ from app.repositories.identity import (
     UserRepository,
 )
 from app.repositories.queues import ConsoleAccessRepository
+from app.services.email_service import send_email
 
 logger = get_logger(__name__)
 
@@ -117,6 +118,15 @@ class AuthService:
         )
         await self._record_consent(
             owner["id"], "privacy", payload["accepted_privacy_version"]
+        )
+
+        verify_url = f"{settings.FRONTEND_URL}/verify-email?token={raw_verification}"
+        await send_email(
+            email,
+            "Verify your Qly account",
+            "Welcome to Qly!\n\n"
+            f"Verify your email address to activate your account:\n{verify_url}\n\n"
+            "If you didn't request this, you can ignore this email.",
         )
 
         logger.info("vendor_registered", extra={"tenant_id": tenant["id"]})
@@ -290,6 +300,14 @@ class AuthService:
             tenant_id,
             actor_id,
         )
+        invite_url = f"{settings.FRONTEND_URL}/accept-invite?token={raw_invite}"
+        await send_email(
+            email,
+            "You've been invited to join a team on Qly",
+            f"You've been invited to join as {payload['role']}.\n\n"
+            f"Accept your invite and set a password:\n{invite_url}\n\n"
+            f"This link expires in {INVITE_TTL_HOURS} hours.",
+        )
         return {"staff_id": staff["id"], "invite_token": raw_invite}
 
     async def accept_invite(self, raw_token: str, password: str) -> dict:
@@ -324,6 +342,15 @@ class AuthService:
                     "reset_expires_at": utcnow() + timedelta(hours=RESET_TTL_HOURS),
                 },
             )
+            reset_url = f"{settings.FRONTEND_URL}/reset-password?token={raw}"
+            await send_email(
+                staff["email"],
+                "Reset your Qly password",
+                "We received a request to reset your password.\n\n"
+                f"Choose a new password:\n{reset_url}\n\n"
+                f"This link expires in {RESET_TTL_HOURS} hours. "
+                "If you didn't request this, you can ignore this email.",
+            )
             return {"sent": True, "reset_token": raw}
         return {"sent": True}
 
@@ -343,6 +370,27 @@ class AuthService:
         # Any existing session is invalidated after a password change.
         await self.refresh.revoke_all_for_subject(staff["id"])
         return {"reset": True}
+
+    async def change_password(
+        self, staff: Dict[str, Any], current_password: str, new_password: str
+    ) -> dict:
+        """Authenticated self-service change - also clears the forced
+        first-login flag set when a temp password was issued. Unlike
+        `reset_password`, this does not revoke other sessions: the caller is
+        already mid-session right after logging in with the password being
+        replaced, and revoking here would force a surprise logout on their
+        next token refresh."""
+        if not verify_password(current_password, staff.get("password_hash", "")):
+            raise AuthenticationError("Current password is incorrect.")
+        validate_password_strength(new_password)
+        await self.staff.set_tokens(
+            staff["id"],
+            {
+                "password_hash": hash_password(new_password),
+                "must_change_password": False,
+            },
+        )
+        return {"changed": True}
 
     # ------------------------------------------------------------------
     # End users (Google OAuth only)
@@ -458,6 +506,7 @@ class AuthService:
             "provider_id": principal.get("provider_id"),
             "permissions": permissions,
             "status": principal.get("status", AccountStatus.ACTIVE.value),
+            "must_change_password": bool(principal.get("must_change_password", False)),
         }
 
     async def _record_consent(self, subject_id: str, document: str, version: str) -> None:

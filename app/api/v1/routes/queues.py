@@ -20,6 +20,7 @@ from app.schemas.common import PaginationParams, ok, pagination_params, paginate
 from app.schemas.queue import (
     QueueCreate,
     QueueLifecycleRequest,
+    QueueUpdate,
     TransferTokenRequest,
     WalkInTokenRequest,
 )
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/vendor/queues", tags=["queues"])
 _view = require_permission(VendorModule.QUEUES.value, Action.VIEW)
 _create = require_permission(VendorModule.QUEUES.value, Action.CREATE)
 _update = require_permission(VendorModule.QUEUES.value, Action.UPDATE)
+_delete = require_permission(VendorModule.QUEUES.value, Action.DELETE)
 
 QUEUE_ACTIONS = {"start", "pause", "resume", "close"}
 TOKEN_ACTIONS = {"recall", "serve", "complete", "skip", "no-show", "cancel", "requeue"}
@@ -183,6 +185,35 @@ async def get_queue(
     if not queue:
         raise NotFound("Queue not found.")
     return ok(queue)
+
+
+@router.patch("/{queue_id}")
+async def update_queue(
+    queue_id: str,
+    payload: QueueUpdate,
+    staff: Dict[str, Any] = Depends(get_current_staff),
+    tenant_id: str = Depends(get_tenant_id),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(_update),
+) -> Dict[str, Any]:
+    updated = await QueueRepository(db).update(
+        queue_id, payload.model_dump(mode="json", exclude_none=True), tenant_id, staff["id"]
+    )
+    if not updated:
+        raise NotFound("Queue not found.")
+    return ok(updated)
+
+
+@router.delete("/{queue_id}")
+async def delete_queue(
+    queue_id: str,
+    staff: Dict[str, Any] = Depends(get_current_staff),
+    tenant_id: str = Depends(get_tenant_id),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(_delete),
+) -> Dict[str, Any]:
+    await QueueService(db).delete_queue(tenant_id, queue_id, staff["id"])
+    return ok({"deleted": True})
 
 
 # ------------------------------------------------------- generic handlers

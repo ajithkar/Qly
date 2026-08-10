@@ -15,7 +15,6 @@ import hmac
 import json
 import time
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
@@ -138,6 +137,16 @@ class StripeService:
             "checkout_session_created",
             extra={"tenant_id": tenant_id, "plan_code": plan_code},
         )
+        if tenant.get("owner_email"):
+            for_company = f" for {tenant['company_name']}" if tenant.get("company_name") else ""
+            await send_email(
+                tenant["owner_email"],
+                "Complete payment to activate your Qly account",
+                f"Hi {tenant.get('owner_name', 'there')},\n\n"
+                f"You're almost set up on Qly's {plan['name']} plan{for_company}.\n\n"
+                f"Complete your payment to activate your account:\n{session['url']}\n\n"
+                "This link will expire - if it does by the time you get to it, ask us for a new one.",
+            )
         return {"checkout_url": session["url"], "session_id": session["id"]}
 
     # ------------------------------------------------------------------
@@ -375,6 +384,7 @@ class StripeService:
                 "password_hash": hash_password(raw_password),
                 "status": AccountStatus.ACTIVE.value,
                 "email_verified": True,
+                "must_change_password": True,
             },
             tenant_id,
         )
@@ -390,8 +400,7 @@ class StripeService:
         except Exception:  # noqa: BLE001 - caching must never block activation
             logger.warning("vendor_credentials_cache_failed", extra={"tenant_id": tenant_id})
 
-        origin = urlparse(settings.STRIPE_SUCCESS_URL)
-        login_url = f"{origin.scheme}://{origin.netloc}/login"
+        login_url = f"{settings.FRONTEND_URL}/login"
         await send_email(
             owner["email"],
             "Your Qly vendor account is ready",

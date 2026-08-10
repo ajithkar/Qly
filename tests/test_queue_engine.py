@@ -78,6 +78,27 @@ async def test_cannot_issue_token_when_queue_closed(db, tenant_id, seeded):
         await service.issue_token(tenant_id, seeded["queue"]["id"], customer_name="Guest")
 
 
+async def test_closing_a_queue_cancels_tokens_still_in_line(db, tenant_id, seeded):
+    """Ending a queue shouldn't leave waiting/called tokens stranded."""
+    service = QueueService(db)
+    queue_id = seeded["queue"]["id"]
+    to_call = await service.issue_token(tenant_id, queue_id, customer_name="Called")
+    waiting = await service.issue_token(tenant_id, queue_id, customer_name="Waiting")
+    called = await service.call_next(tenant_id, queue_id, "operator")
+    assert called["id"] == to_call["id"]
+
+    await service.change_queue_status(tenant_id, queue_id, "close", "operator")
+
+    tokens = TokenRepository(db)
+    refreshed_waiting = await tokens.get_by_id(waiting["id"], tenant_id)
+    refreshed_called = await tokens.get_by_id(called["id"], tenant_id)
+    assert refreshed_waiting["status"] == TokenStatus.CANCELLED.value
+    assert refreshed_called["status"] == TokenStatus.CANCELLED.value
+
+    monitor = await service.live_monitor(tenant_id, queue_id)
+    assert monitor["waiting_count"] == 0
+
+
 async def test_queue_capacity_is_enforced(db, tenant_id, seeded):
     from app.repositories.queues import QueueRepository
 
