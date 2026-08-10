@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, UserCog } from 'lucide-react';
+import { UserCog } from 'lucide-react';
 
 import { admin } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
 import { Badge } from '@/components/ui/Badge';
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/Dialog';
@@ -66,10 +67,7 @@ export default function AdminVendorDetail() {
 
   return (
     <div className="space-y-5">
-      <Link to="/admin/vendors" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        All vendors
-      </Link>
+      <BackLink to="/admin/vendors" label="All vendors" />
 
       <div className="flex items-start justify-between gap-4">
         <div>

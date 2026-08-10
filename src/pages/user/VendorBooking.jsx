@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Clock, IndianRupee } from 'lucide-react';
+import { Clock, IndianRupee } from 'lucide-react';
 
 import { discovery, me } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -71,10 +72,7 @@ export default function VendorBooking() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <Link to="/find" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Find a place
-      </Link>
+      <BackLink to="/find" label="Find a place" className="mb-4" />
 
       {vendorQuery.isSuccess && (
         <div className="mb-5">

@@ -72,7 +72,7 @@ export default function Appointments() {
       </div>
 
       <Card>
-        <CardHeader title="Bookings" />
+        <CardHeader title="Bookings" icon={CalendarDays} />
         {listQuery.isLoading && <SkeletonRows />}
         {listQuery.isError && <ErrorState error={listQuery.error} onRetry={listQuery.refetch} />}
         {listQuery.isSuccess && (

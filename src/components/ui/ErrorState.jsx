@@ -12,7 +12,7 @@ export function ErrorState({ error, onRetry }) {
     error?.message || 'Something went wrong while loading this view.';
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <div className="rounded-full border border-rose/25 bg-rose/10 p-3">
+      <div className="rounded-full bg-gradient-to-br from-rose/15 to-rose/5 p-3 shadow-soft">
         <AlertTriangle className="h-5 w-5 text-rose" aria-hidden="true" />
       </div>
       <h3 className="mt-4 text-sm font-semibold">This didn&apos;t load</h3>

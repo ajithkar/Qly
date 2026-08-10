@@ -11,7 +11,11 @@ import { ApiError } from '@/api/client';
 
 import Landing from '@/pages/public/Landing';
 import Login from '@/pages/public/Login';
+import Demo from '@/pages/public/Demo';
 import ConsoleAccess from '@/pages/public/ConsoleAccess';
+import ForgotPassword from '@/pages/public/ForgotPassword';
+import ResetPassword from '@/pages/public/ResetPassword';
+import AcceptInvite from '@/pages/public/AcceptInvite';
 
 // Route-level code splitting: the operator console and its charts never load
 // for someone who only wants to check their place in a queue.
@@ -70,6 +74,10 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<Landing />} />
                   <Route path="/login" element={<Login />} />
+                  <Route path="/demo" element={<Demo />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route path="/accept-invite" element={<AcceptInvite />} />
                   <Route path="/console-access/:queueId" element={<ConsoleAccess />} />
                   <Route path="/find" element={<FindPlaces />} />
                   <Route path="/vendors/:tenantId" element={<VendorBooking />} />

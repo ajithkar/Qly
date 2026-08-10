@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 
 import { useAuth } from '@/auth/AuthContext';
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Field, Input } from '@/components/ui/Field';
@@ -35,7 +36,8 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-paper px-4">
+      <BackLink to="/" label="Back to home" className="absolute left-4 top-4 sm:left-6 sm:top-6" />
       <div className="w-full max-w-sm">
         <Link to="/" className="mb-6 block text-center font-mono text-sm font-bold">
           Qly

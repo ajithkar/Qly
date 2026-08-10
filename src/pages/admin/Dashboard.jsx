@@ -1,6 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, Building2 } from 'lucide-react';
+import {
+  Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
+import {
+  ArrowRight, Building2, DollarSign, ShieldAlert, Users, Wallet,
+} from 'lucide-react';
 
 import { admin } from '@/api/endpoints';
 import { Button } from '@/components/ui/Button';
@@ -34,21 +39,22 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="MRR" value={money(d.mrr)} tone="signal" />
-        <Stat label="ARR" value={money(d.arr)} tone="signal" />
-        <Stat label="Paid vendors" value={d.paid_vendors} tone="jade" />
-        <Stat label="Free vendors" value={d.free_vendors} />
+        <Stat label="MRR" value={money(d.mrr)} tone="signal" icon={DollarSign} />
+        <Stat label="ARR" value={money(d.arr)} tone="signal" icon={Wallet} />
+        <Stat label="Paid vendors" value={d.paid_vendors} tone="jade" icon={Building2} />
+        <Stat label="Free vendors" value={d.free_vendors} icon={Building2} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Total vendors" value={d.total_vendors} />
-        <Stat label="Active vendors" value={d.active_vendors} tone="jade" />
+        <Stat label="Total vendors" value={d.total_vendors} icon={Building2} />
+        <Stat label="Active vendors" value={d.active_vendors} tone="jade" icon={Building2} />
         <Stat
           label="Suspended vendors"
           value={d.suspended_vendors}
           tone={d.suspended_vendors > 0 ? 'rose' : 'default'}
+          icon={ShieldAlert}
         />
-        <Stat label="End users" value={d.total_end_users} />
+        <Stat label="End users" value={d.total_end_users} icon={Users} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -56,6 +62,46 @@ export default function AdminDashboard() {
         <Stat label="Active queues" value={d.active_queues} tone="jade" />
         <Stat label="Tokens issued today" value={d.tokens_issued_today} />
       </div>
+
+      <Card>
+        <CardHeader title="Vendor mix" description="Where today's vendors stand, at a glance." />
+        <div className="px-2 pb-4 pt-2">
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart
+              layout="vertical"
+              data={[
+                { name: 'Paid', value: d.paid_vendors },
+                { name: 'Free', value: d.free_vendors },
+                { name: 'Active', value: d.active_vendors },
+                { name: 'Suspended', value: d.suspended_vendors },
+              ]}
+              margin={{ left: 8, right: 24 }}
+            >
+              <XAxis type="number" hide />
+              <YAxis
+                type="category" dataKey="name" width={80}
+                tick={{ fontSize: 12, fill: 'rgb(var(--muted))' }}
+                axisLine={false} tickLine={false}
+              />
+              <Tooltip
+                cursor={{ fill: 'rgb(var(--paper))' }}
+                contentStyle={{
+                  background: 'rgb(var(--surface))',
+                  border: '1px solid rgb(var(--line))',
+                  borderRadius: 14,
+                  fontSize: 12,
+                  boxShadow: '0 8px 24px rgb(0 0 0 / 0.10)',
+                }}
+              />
+              <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={22}>
+                {['signal', 'muted', 'jade', 'rose'].map((tone) => (
+                  <Cell key={tone} fill={`rgb(var(--${tone}))`} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
 
       {d.suspended_vendors > 0 && (
         <Card>

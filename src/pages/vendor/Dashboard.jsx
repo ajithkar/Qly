@@ -3,7 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
-import { ListOrdered, ArrowRight } from 'lucide-react';
+import {
+  ListOrdered, ArrowRight, PlayCircle, PauseCircle, XCircle,
+} from 'lucide-react';
 
 import { queues } from '@/api/endpoints';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
@@ -39,16 +41,18 @@ export default function VendorDashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Queues open" value={openCount} tone="jade" />
-        <Stat label="Queues total" value={rows.length} />
+        <Stat label="Queues open" value={openCount} tone="jade" icon={PlayCircle} />
+        <Stat label="Queues total" value={rows.length} icon={ListOrdered} />
         <Stat
           label="Paused"
           value={rows.filter((q) => q.status === 'paused').length}
           tone="amber"
+          icon={PauseCircle}
         />
         <Stat
           label="Closed"
           value={rows.filter((q) => q.status === 'closed').length}
+          icon={XCircle}
         />
       </div>
 
@@ -130,8 +134,9 @@ export default function VendorDashboard() {
                     contentStyle={{
                       background: 'rgb(var(--surface))',
                       border: '1px solid rgb(var(--line))',
-                      borderRadius: 10,
+                      borderRadius: 14,
                       fontSize: 12,
+                      boxShadow: '0 8px 24px rgb(0 0 0 / 0.10)',
                     }}
                   />
                   <Bar dataKey="capacity" fill="rgb(var(--signal))" radius={[4, 4, 0, 0]} />

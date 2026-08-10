@@ -9,6 +9,7 @@ import {
 import { appointments, me } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
 import { Badge } from '@/components/ui/Badge';
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/Dialog';
@@ -50,6 +51,7 @@ export default function Profile() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-4 py-8">
+      <BackLink to="/find" label="Find a place" />
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Avatar profile={profile} />
@@ -58,13 +60,10 @@ export default function Profile() {
             <p className="text-sm text-muted">{profile.email}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link to="/find" className="text-sm text-muted hover:text-ink">Find a place</Link>
-          <Button variant="ghost" size="sm" onClick={signOut}>
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-            Sign out
-          </Button>
-        </div>
+        <Button variant="ghost" size="sm" onClick={signOut}>
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          Sign out
+        </Button>
       </div>
 
       <ProfileForm profile={profile} />

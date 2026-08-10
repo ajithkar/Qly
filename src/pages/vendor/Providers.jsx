@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Users } from 'lucide-react';
+import { Pencil, Plus, Trash2, Users } from 'lucide-react';
 
 import { branches, providers } from '@/api/endpoints';
+import { useAuth } from '@/auth/AuthContext';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { Dialog } from '@/components/ui/Dialog';
+import { ConfirmDialog, Dialog } from '@/components/ui/Dialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Field, Input, Select } from '@/components/ui/Field';
@@ -20,10 +21,15 @@ import { useToast } from '@/components/ui/Toast';
  * label has to work for a clinic, a salon and a bank counter alike.
  */
 export default function Providers() {
+  const { can } = useAuth();
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState(null);
+  const [deletingProvider, setDeletingProvider] = useState(null);
   const toast = useToast();
   const queryClient = useQueryClient();
+  const canEdit = can('providers:update');
+  const canDelete = can('providers:delete');
 
   const listQuery = useQuery({
     queryKey: ['providers', { page }],
@@ -35,6 +41,26 @@ export default function Providers() {
     onSuccess: () => {
       toast.success('Team member added');
       setOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['providers'] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, data }) => providers.update(id, data),
+    onSuccess: () => {
+      toast.success('Team member updated');
+      setEditingProvider(null);
+      queryClient.invalidateQueries({ queryKey: ['providers'] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id) => providers.remove(id),
+    onSuccess: () => {
+      toast.success('Team member deleted');
+      setDeletingProvider(null);
       queryClient.invalidateQueries({ queryKey: ['providers'] });
     },
     onError: (error) => toast.error(error.message),
@@ -54,7 +80,7 @@ export default function Providers() {
       </div>
 
       <Card>
-        <CardHeader title="All team members" />
+        <CardHeader title="All team members" icon={Users} />
         {listQuery.isLoading && <SkeletonRows />}
         {listQuery.isError && <ErrorState error={listQuery.error} onRetry={listQuery.refetch} />}
         {listQuery.isSuccess && (
@@ -88,6 +114,33 @@ export default function Providers() {
                     <Badge tone={r.status === 'active' ? 'open' : 'closed'}>{r.status}</Badge>
                   ),
                 },
+                {
+                  key: 'actions',
+                  header: '',
+                  align: 'right',
+                  render: (row) => (
+                    <div className="flex justify-end gap-2">
+                      {canEdit && (
+                        <Button
+                          variant="secondary" size="sm"
+                          onClick={() => setEditingProvider(row)}
+                          aria-label={`Edit ${row.name}`}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="danger" size="sm"
+                          onClick={() => setDeletingProvider(row)}
+                          aria-label={`Delete ${row.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      )}
+                    </div>
+                  ),
+                },
               ]}
             />
             <Pagination meta={listQuery.data.meta} onPageChange={setPage} />
@@ -100,6 +153,24 @@ export default function Providers() {
         onClose={() => setOpen(false)}
         onSubmit={(data) => create.mutate(data)}
         loading={create.isPending}
+      />
+
+      <EditProviderDialog
+        provider={editingProvider}
+        onClose={() => setEditingProvider(null)}
+        onSubmit={(data) => update.mutate({ id: editingProvider.id, data })}
+        loading={update.isPending}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deletingProvider)}
+        onClose={() => setDeletingProvider(null)}
+        onConfirm={() => remove.mutate(deletingProvider.id)}
+        title={`Delete "${deletingProvider?.name ?? ''}"?`}
+        description="This permanently removes them from your dashboard. This cannot be undone."
+        confirmLabel="Delete team member"
+        variant="danger"
+        loading={remove.isPending}
       />
     </div>
   );
@@ -220,6 +291,93 @@ function ProviderDialog({ open, onClose, onSubmit, loading }) {
     </Dialog>
   );
 }
+
+function EditProviderDialog({ provider, onClose, onSubmit, loading }) {
+  const open = Boolean(provider);
+  const [form, setForm] = useState({
+    name: '', title: '', specialty: '', consultation_fee: 0, status: 'active',
+  });
+
+  useEffect(() => {
+    if (provider) {
+      setForm({
+        name: provider.name ?? '',
+        title: provider.title ?? '',
+        specialty: provider.specialty ?? '',
+        consultation_fee: provider.consultation_fee ?? 0,
+        status: provider.status ?? 'active',
+      });
+    }
+  }, [provider]);
+
+  const set = (key, asNumber = false) => (event) =>
+    setForm({ ...form, [key]: asNumber ? Number(event.target.value) : event.target.value });
+
+  const submit = () =>
+    onSubmit({
+      name: form.name,
+      title: form.title || null,
+      specialty: form.specialty || null,
+      consultation_fee: form.consultation_fee,
+      status: form.status,
+    });
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={`Edit "${provider?.name ?? ''}"`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={submit} loading={loading} disabled={!form.name.trim()}>
+            Save changes
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Name" htmlFor="p-edit-name" required>
+          <Input id="p-edit-name" value={form.name} onChange={set('name')} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Title" htmlFor="p-edit-title">
+            <Input id="p-edit-title" value={form.title} onChange={set('title')} placeholder="Dr." />
+          </Field>
+          <Field label="Specialty" htmlFor="p-edit-spec">
+            <Input id="p-edit-spec" value={form.specialty} onChange={set('specialty')} />
+          </Field>
+        </div>
+        <Field label="Fee" htmlFor="p-edit-fee">
+          <Input
+            id="p-edit-fee" type="number" min="0" step="0.01"
+            value={form.consultation_fee} onChange={set('consultation_fee', true)}
+          />
+        </Field>
+        <Field label="Status" htmlFor="p-edit-status">
+          <Select id="p-edit-status" value={form.status} onChange={set('status')}>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+          </Select>
+        </Field>
+      </div>
+    </Dialog>
+  );
+}
+
+EditProviderDialog.propTypes = {
+  provider: PropTypes.shape({
+    id: PropTypes.string,
+    name: PropTypes.string,
+    title: PropTypes.string,
+    specialty: PropTypes.string,
+    consultation_fee: PropTypes.number,
+    status: PropTypes.string,
+  }),
+  onClose: PropTypes.func.isRequired,
+  onSubmit: PropTypes.func.isRequired,
+  loading: PropTypes.bool,
+};
 
 ProviderDialog.propTypes = {
   open: PropTypes.bool, onClose: PropTypes.func,

@@ -2,6 +2,7 @@
 import PropTypes from 'prop-types';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
+import { ChangePasswordModal } from '@/components/auth/ChangePasswordModal';
 import { FullPageSpinner } from '@/components/ui/Spinner';
 
 export function RequireAuth({ principalType }) {
@@ -17,6 +18,17 @@ export function RequireAuth({ principalType }) {
   }
   if (principalType && principal.principal_type !== principalType) {
     return <Navigate to="/" replace />;
+  }
+  // A temp password (e.g. after Stripe activation) must be replaced before
+  // the dashboard is usable. The outlet still renders underneath so the
+  // chrome isn't a blank flash - the modal has no dismiss path of its own.
+  if (principal.principal_type === 'staff' && principal.must_change_password) {
+    return (
+      <>
+        <Outlet />
+        <ChangePasswordModal />
+      </>
+    );
   }
   return <Outlet />;
 }

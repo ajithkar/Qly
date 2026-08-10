@@ -3,36 +3,42 @@
 @tailwind utilities;
 
 /*
-  Palette drawn from civic wayfinding and call-board hardware, not from SaaS
-  marketing: signal blue is the blue of every airport and hospital direction
-  sign, amber is the "now serving" bulb, jade and rose read as served and
-  missed at a glance from across a room.
+  A clean, well-lit modern clinic, not a developer tool: soft blue-grey
+  paper, white cards with quiet shadows, a calm medical teal as the one
+  accent. Success/waiting/error read as green/amber/rose at a glance;
+  red is reserved for genuine errors only - it alarms patients otherwise.
 */
 @layer base {
   :root {
-    --ink: 18 22 31;        /* deep slate-navy, deliberately not black */
-    --paper: 247 248 250;   /* cool neutral ground */
-    --surface: 255 255 255;
-    --line: 223 227 234;
-    --muted: 106 116 133;
-    --signal: 27 77 228;
-    --amber: 232 163 61;
-    --jade: 18 135 111;
-    --rose: 200 56 90;
-    --board: 16 20 28;      /* the call-board plate */
+    --ink: 16 33 43;          /* #10212B - primary text */
+    --secondary: 74 92 104;   /* #4A5C68 - secondary text */
+    --muted: 124 139 150;     /* #7C8B96 - muted text */
+    --paper: 247 250 252;     /* #F7FAFC - page background */
+    --surface: 255 255 255;   /* #FFFFFF - cards */
+    --line: 227 234 240;      /* #E3EAF0 - card borders */
+    --signal: 14 124 134;     /* #0E7C86 - primary teal */
+    --signal-strong: 10 98 107; /* #0A626B - primary hover */
+    --link: 37 99 235;        /* #2563EB - inline text links only */
+    --jade: 18 133 95;        /* #12855F - success / "your turn" */
+    --amber: 178 94 9;        /* #B25E09 - waiting */
+    --rose: 225 29 72;        /* errors only */
+    --board: 10 24 30;        /* the call-board plate */
   }
 
   .dark {
-    --ink: 232 236 243;
-    --paper: 13 16 22;
-    --surface: 22 27 36;
-    --line: 44 52 66;
-    --muted: 138 148 166;
-    --signal: 106 145 255;
-    --amber: 240 183 96;
-    --jade: 52 176 148;
-    --rose: 233 106 138;
-    --board: 8 11 16;
+    --ink: 230 238 241;
+    --secondary: 163 178 186;
+    --muted: 130 145 154;
+    --paper: 20 26 31;        /* #141A1F - soft charcoal, not black */
+    --surface: 28 36 43;      /* #1C242B */
+    --line: 40 50 58;
+    --signal: 56 166 175;     /* lightened teal for dark-surface contrast */
+    --signal-strong: 45 150 158;
+    --link: 96 148 246;
+    --jade: 45 176 140;
+    --amber: 214 148 74;
+    --rose: 251 113 133;
+    --board: 4 11 14;
   }
 
   * {
