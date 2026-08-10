@@ -221,6 +221,25 @@ class TokenRepository(BaseRepository):
             {"queue_id": queue_id, "status": {"$in": ACTIVE_TOKEN_STATUSES}}
         )
 
+    async def active_tokens(self, queue_id: str) -> List[dict]:
+        cursor = self.collection.find(
+            {"queue_id": queue_id, "status": {"$in": ACTIVE_TOKEN_STATUSES}}
+        )
+        return [serialize(d) for d in await cursor.to_list(length=1000)]
+
+    async def cancel_active(self, queue_id: str, actor_id: Optional[str] = None) -> List[dict]:
+        """Bulk-cancel every token still waiting/called/serving, e.g. when a
+        queue is ended with people still in line. Returns the tokens that were
+        cancelled so callers can notify their owners."""
+        tokens = await self.active_tokens(queue_id)
+        if not tokens:
+            return []
+        await self.collection.update_many(
+            {"queue_id": queue_id, "status": {"$in": ACTIVE_TOKEN_STATUSES}},
+            {"$set": {"status": TokenStatus.CANCELLED.value, "cancelled_at": utcnow(), **touch(actor_id)}},
+        )
+        return tokens
+
     # -- writes ----------------------------------------------------------
     async def create_token(self, payload: Dict[str, Any], actor_id: Optional[str] = None) -> dict:
         doc = {

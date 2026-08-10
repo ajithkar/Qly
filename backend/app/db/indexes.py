@@ -122,6 +122,10 @@ INDEXES: dict[str, list[IndexModel]] = {
     "consents": [
         IndexModel([("subject_id", ASCENDING), ("document", ASCENDING), ("version", ASCENDING)]),
     ],
+    "leads": [
+        IndexModel([("created_at", DESCENDING)]),
+        IndexModel([("segment", ASCENDING), ("created_at", DESCENDING)]),
+    ],
 }
 
 

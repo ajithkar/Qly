@@ -80,7 +80,7 @@ export default function AdminSystemHealth() {
       </div>
 
       <Card>
-        <CardHeader title="Process" />
+        <CardHeader title="Process" icon={Activity} />
         <CardBody className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div className="flex items-center gap-2">
             <Server className="h-4 w-4 text-muted" aria-hidden="true" />

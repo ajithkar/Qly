@@ -147,9 +147,28 @@ class QueueService:
                 f"Cannot {action} a queue that is currently '{current['status']}'."
             )
 
+        if action == "close":
+            # Ending a queue clears the line - nobody still waiting or being
+            # served can be actioned once the queue is closed, so cancel them
+            # rather than leave stale entries behind.
+            cancelled = await self.tokens.cancel_active(queue_id, actor_id)
+            for token in cancelled:
+                await self.notifications.token_event(tenant_id, token, "cancelled")
+
         await self._broadcast(tenant_id, queue_id)
         await self.notifications.queue_status_changed(tenant_id, queue_id, target.value)
         return updated
+
+    async def delete_queue(self, tenant_id: str, queue_id: str, actor_id: str) -> None:
+        queue = await self.queues.get_by_id(queue_id, tenant_id)
+        if not queue:
+            raise NotFound("Queue not found.")
+        if queue["status"] in (QueueStatus.OPEN.value, QueueStatus.PAUSED.value):
+            raise Conflict(
+                "End this queue before deleting it - people may still be waiting.",
+                code="queue_still_active",
+            )
+        await self.queues.soft_delete_by_id(queue_id, tenant_id, actor_id)
 
     async def create_console_share(self, tenant_id: str, queue_id: str, actor_id: str) -> dict:
         """A one-time code an owner/manager hands to the assigned doctor so

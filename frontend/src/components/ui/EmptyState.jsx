@@ -5,8 +5,8 @@ import { Inbox } from 'lucide-react';
 export function EmptyState({ icon: Icon = Inbox, title, description, action }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <div className="rounded-full border border-line bg-paper p-3">
-        <Icon className="h-5 w-5 text-muted" aria-hidden="true" />
+      <div className="rounded-full bg-gradient-to-br from-signal/10 to-jade/5 p-3 shadow-soft">
+        <Icon className="h-5 w-5 text-signal" aria-hidden="true" />
       </div>
       <h3 className="mt-4 text-sm font-semibold">{title}</h3>
       {description && (

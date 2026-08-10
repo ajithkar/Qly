@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
-    PASSWORD_MIN_LENGTH: int = 10
+    PASSWORD_MIN_LENGTH: int = 8
 
     # Brute-force protection
     LOGIN_MAX_ATTEMPTS: int = 5
@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"]
     )
+
+    # --- Frontend (base URL for links embedded in emails) ---
+    FRONTEND_URL: str = "http://localhost:5173"
 
     # --- Google OAuth (end users) ---
     GOOGLE_CLIENT_ID: str = ""
@@ -76,6 +79,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "Qly"
+
+    # --- Sales ---
+    # Where a new lead (demo request / trial signup) is announced. Falls back
+    # to SMTP_FROM_EMAIL at the call site if left unset, so no new env var is
+    # required to get a working default.
+    SALES_NOTIFICATION_EMAIL: str = ""
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { me } from '@/api/endpoints';
 import { CallBoard } from '@/components/CallBoard';
+import { BackLink } from '@/components/ui/BackLink';
 import { Card, CardBody } from '@/components/ui/Card';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { FullPageSpinner } from '@/components/ui/Spinner';
@@ -29,6 +30,7 @@ export default function TrackToken() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-10">
+      <BackLink to="/find" label="Find a place" className="mb-4" />
       <CallBoard token={token} label="Your token" />
 
       <Card className="mt-4">

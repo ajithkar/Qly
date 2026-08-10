@@ -75,7 +75,7 @@ export default function AdminPlans() {
       </div>
 
       <Card>
-        <CardHeader title="All plans" />
+        <CardHeader title="All plans" icon={Package} />
         {listQuery.isLoading && <SkeletonRows />}
         {listQuery.isError && <ErrorState error={listQuery.error} onRetry={listQuery.refetch} />}
         {listQuery.isSuccess && (

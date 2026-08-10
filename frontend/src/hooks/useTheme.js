@@ -2,13 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 const KEY = 'qly.theme';
 
-/** Dark mode, persisted, defaulting to the operating system preference. */
+/** Dark mode, persisted, defaulting to light regardless of OS preference. */
 export function useTheme() {
-  const [theme, setTheme] = useState(
-    () =>
-      localStorage.getItem(KEY) ||
-      (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  );
+  const [theme, setTheme] = useState(() => localStorage.getItem(KEY) || 'light');
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');

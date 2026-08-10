@@ -46,6 +46,7 @@ export const principal = z.object({
   branch_id: z.string().nullish(),
   permissions: z.array(z.string()).default([]),
   status: z.string(),
+  must_change_password: z.boolean().default(false),
 });
 
 // --- queue --------------------------------------------------------------
@@ -290,4 +291,10 @@ export const notification = z.object({
   body: z.string(),
   read: z.boolean().default(false),
   created_at: z.string(),
+});
+
+// --- leads ----------------------------------------------------------------
+export const lead = z.object({
+  id: z.string(),
+  message: z.string(),
 });

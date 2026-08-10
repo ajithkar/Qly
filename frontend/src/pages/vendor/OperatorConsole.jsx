@@ -3,18 +3,19 @@ import PropTypes from 'prop-types';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CheckCircle2, ChevronLeft, LogOut, PhoneCall, Pause, Play, Plus,
-  ShieldAlert, SkipForward, UserX, Radio, RadioTower,
+  CheckCircle2, LogOut, PhoneCall, Pause, Play, Plus,
+  ShieldAlert, SkipForward, Square, UserX, Radio, RadioTower,
 } from 'lucide-react';
 
 import { queues } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
 import { useQueueSocket } from '@/hooks/useQueueSocket';
 import { CallBoard, UpNext } from '@/components/CallBoard';
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Dialog } from '@/components/ui/Dialog';
+import { ConfirmDialog, Dialog } from '@/components/ui/Dialog';
 import { Field, Input, Select } from '@/components/ui/Field';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { FullPageSpinner } from '@/components/ui/Spinner';
@@ -41,6 +42,7 @@ export default function OperatorConsole() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const [endQueueOpen, setEndQueueOpen] = useState(false);
 
   const signOut = async () => {
     await logout();
@@ -127,6 +129,7 @@ export default function OperatorConsole() {
     mutationFn: (action) => queues.lifecycle(queueId, action),
     onSuccess: (queue) => {
       toast.success(`Queue ${queue.status}`);
+      setEndQueueOpen(false);
       refresh();
     },
     onError: handleError,
@@ -185,6 +188,7 @@ export default function OperatorConsole() {
   const monitor = monitorQuery.data;
   const current = monitor.current_token;
   const isOpen = monitor.status === 'open';
+  const isClosed = monitor.status === 'closed';
   const waitingTokens = (waitingQuery.data?.data ?? []).filter(
     (token) => token.status === 'waiting',
   );
@@ -223,13 +227,24 @@ export default function OperatorConsole() {
               Pause
             </Button>
           ) : (
+            !isClosed && (
+              <Button
+                variant="secondary" size="sm"
+                onClick={() => lifecycle.mutate(monitor.status === 'paused' ? 'resume' : 'start')}
+                loading={lifecycle.isPending}
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+                {monitor.status === 'paused' ? 'Resume' : 'Start queue'}
+              </Button>
+            )
+          )}
+          {!isClosed && (
             <Button
-              variant="secondary" size="sm"
-              onClick={() => lifecycle.mutate(monitor.status === 'paused' ? 'resume' : 'start')}
-              loading={lifecycle.isPending}
+              variant="danger" size="sm"
+              onClick={() => setEndQueueOpen(true)}
             >
-              <Play className="h-4 w-4" aria-hidden="true" />
-              {monitor.status === 'paused' ? 'Resume' : 'Start queue'}
+              <Square className="h-4 w-4" aria-hidden="true" />
+              End queue
             </Button>
           )}
         </div>
@@ -285,7 +300,9 @@ export default function OperatorConsole() {
 
           {!isOpen && (
             <p className="text-sm text-muted">
-              This queue is {monitor.status}. Start it before issuing or calling tokens.
+              {isClosed
+                ? 'This queue has ended. Remaining tokens were cancelled.'
+                : `This queue is ${monitor.status}. Start it before issuing or calling tokens.`}
             </p>
           )}
         </div>
@@ -376,6 +393,17 @@ export default function OperatorConsole() {
         onSubmit={(data) => walkIn.mutate(data)}
         loading={walkIn.isPending}
       />
+
+      <ConfirmDialog
+        open={endQueueOpen}
+        onClose={() => setEndQueueOpen(false)}
+        onConfirm={() => lifecycle.mutate('close')}
+        title="End this queue?"
+        description="This stops it from accepting new tokens. Anyone still waiting or being served will be cancelled, and this cannot be undone."
+        confirmLabel="End queue"
+        variant="danger"
+        loading={lifecycle.isPending}
+      />
     </ConsoleShell>
   );
 }
@@ -386,10 +414,7 @@ function ConsoleShell({ children, onSignOut }) {
   return (
     <div className="flex min-h-screen flex-col bg-paper">
       <header className="flex items-center justify-between border-b border-line bg-surface px-4 py-3">
-        <Link to="/vendor/queues" className="flex items-center gap-1.5 text-sm text-muted hover:text-ink">
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          Queues
-        </Link>
+        <BackLink to="/vendor/queues" label="Queues" />
         <Button variant="ghost" size="sm" onClick={onSignOut}>
           <LogOut className="h-4 w-4" aria-hidden="true" />
           Sign out

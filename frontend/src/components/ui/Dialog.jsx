@@ -7,19 +7,29 @@ import { Button } from './Button';
 /** Modal with escape-to-close and focus moved into the panel on open. */
 export function Dialog({ open, onClose, title, description, children, footer, initialFocusRef }) {
   const panelRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return undefined;
     const onKeyDown = (event) => {
-      if (event.key === 'Escape') onClose?.();
+      if (event.key === 'Escape') onCloseRef.current?.();
     };
     document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
     // Moving focus into the dialog is required modal behaviour. Doing it here
     // rather than with an autoFocus prop keeps focus management in one place
-    // and lets a caller name the field that should receive it.
+    // and lets a caller name the field that should receive it. Deliberately
+    // keyed only on `open` — re-running this on every parent re-render (e.g.
+    // while the caller passes a fresh inline `onClose`) would steal focus
+    // back from whatever field the user is typing in.
     (initialFocusRef?.current ?? panelRef.current)?.focus();
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose, initialFocusRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 
@@ -37,7 +47,7 @@ export function Dialog({ open, onClose, title, description, children, footer, in
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
         tabIndex={-1}
-        className="relative w-full max-w-lg rounded-card border border-line bg-surface shadow-xl"
+        className="relative w-full max-w-lg rounded-card border border-line bg-surface shadow-elevated"
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div>

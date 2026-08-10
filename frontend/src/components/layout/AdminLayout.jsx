@@ -47,8 +47,10 @@ export default function AdminLayout() {
         )}
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-signal" aria-hidden="true" />
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-card bg-gradient-to-br from-signal to-rose text-white shadow-soft">
+              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+            </span>
             <span className="font-mono text-sm font-bold tracking-tight">Qly Admin</span>
           </div>
           <button
@@ -69,10 +71,10 @@ export default function AdminLayout() {
               onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-2.5 rounded-card px-3 py-2 text-sm transition-colors',
+                  'flex items-center gap-2.5 rounded-card border-l-2 px-3 py-2 text-sm transition-colors',
                   isActive
-                    ? 'bg-signal/10 font-medium text-signal'
-                    : 'text-muted hover:bg-paper hover:text-ink',
+                    ? 'border-signal bg-gradient-to-r from-signal/10 to-transparent font-medium text-signal'
+                    : 'border-transparent text-muted hover:bg-paper hover:text-ink',
                 )
               }
             >

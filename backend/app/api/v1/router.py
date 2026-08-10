@@ -8,6 +8,7 @@ from app.api.v1.routes import (
     billing,
     catalog,
     health,
+    leads,
     public,
     queues,
     users,
@@ -23,3 +24,4 @@ api_router.include_router(appointments.router)
 api_router.include_router(billing.router)
 api_router.include_router(admin.router)
 api_router.include_router(public.router)
+api_router.include_router(leads.router)

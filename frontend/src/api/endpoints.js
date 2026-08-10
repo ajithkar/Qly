@@ -23,6 +23,12 @@ export const auth = {
   resetPassword: (body) =>
     request({ url: '/auth/reset-password', method: 'POST', data: body },
       z.object({ reset: z.boolean() })),
+  changePassword: (body) =>
+    request({ url: '/auth/change-password', method: 'POST', data: body },
+      z.object({ changed: z.boolean() })),
+  acceptInvite: (body) =>
+    request({ url: '/auth/accept-invite', method: 'POST', data: body },
+      z.object({ activated: z.boolean() })),
   googleLoginUrl: () =>
     request({ url: '/auth/google/login' },
       z.object({ authorization_url: z.string(), state: z.string() })),
@@ -66,6 +72,9 @@ export const queues = {
   list: (params) => requestPage({ url: '/vendor/queues', params }, s.queue),
   get: (id) => request({ url: `/vendor/queues/${id}` }, s.queue),
   create: (data) => request({ url: '/vendor/queues', method: 'POST', data }, s.queue),
+  update: (id, data) => request({ url: `/vendor/queues/${id}`, method: 'PATCH', data }, s.queue),
+  remove: (id) => request({ url: `/vendor/queues/${id}`, method: 'DELETE' },
+    z.object({ deleted: z.boolean() })),
   monitor: (id) => request({ url: `/vendor/queues/${id}/monitor` }, s.liveMonitor),
   tokens: (id, params) =>
     requestPage({ url: `/vendor/queues/${id}/tokens`, params }, s.queueToken),
@@ -176,6 +185,11 @@ export const publicQueue = {
   status: (queueId, tenant_id) =>
     request({ url: `/queues/${queueId}/status`, params: { tenant_id } },
       s.liveMonitor.partial({ current_token: true, next_token: true })),
+};
+
+// --- leads ----------------------------------------------------------------
+export const leads = {
+  create: (data) => request({ url: '/leads', method: 'POST', data }, s.lead),
 };
 
 // --- billing ------------------------------------------------------------
