@@ -3,42 +3,44 @@
 @tailwind utilities;
 
 /*
-  A clean, well-lit modern clinic, not a developer tool: soft blue-grey
-  paper, white cards with quiet shadows, a calm medical teal as the one
-  accent. Success/waiting/error read as green/amber/rose at a glance;
-  red is reserved for genuine errors only - it alarms patients otherwise.
+  Brand palette sampled from the Qly mark: electric blue gradient (#0060F8
+  to #00B0F8) over near-black navy. Paper stays a crisp blue-white, ink and
+  the call-board plate borrow the logo's dark navy, and signal/link both
+  live in-family with the mark's blue instead of a generic accent.
+  Success/waiting/error stay universal green/amber/rose - those are status
+  semantics, not brand, and red is reserved for genuine errors only.
 */
 @layer base {
   :root {
-    --ink: 16 33 43;          /* #10212B - primary text */
-    --secondary: 74 92 104;   /* #4A5C68 - secondary text */
-    --muted: 124 139 150;     /* #7C8B96 - muted text */
-    --paper: 247 250 252;     /* #F7FAFC - page background */
+    --ink: 8 20 45;           /* #08142D - logo navy, primary text */
+    --secondary: 60 78 107;   /* #3C4E6B - secondary text */
+    --muted: 108 124 148;     /* #6C7C94 - muted text */
+    --paper: 246 249 253;     /* #F6F9FD - blue-tinted page background */
     --surface: 255 255 255;   /* #FFFFFF - cards */
-    --line: 227 234 240;      /* #E3EAF0 - card borders */
-    --signal: 14 124 134;     /* #0E7C86 - primary teal */
-    --signal-strong: 10 98 107; /* #0A626B - primary hover */
-    --link: 37 99 235;        /* #2563EB - inline text links only */
+    --line: 222 231 242;      /* #DEE7F2 - card borders */
+    --signal: 0 98 216;       /* #0062D8 - primary brand blue */
+    --signal-strong: 0 64 176; /* #0040B0 - primary hover */
+    --link: 0 112 240;        /* #0070F0 - inline text links only */
     --jade: 18 133 95;        /* #12855F - success / "your turn" */
     --amber: 178 94 9;        /* #B25E09 - waiting */
     --rose: 225 29 72;        /* errors only */
-    --board: 10 24 30;        /* the call-board plate */
+    --board: 0 12 36;         /* #000C24 - the call-board plate, logo navy */
   }
 
   .dark {
-    --ink: 230 238 241;
-    --secondary: 163 178 186;
-    --muted: 130 145 154;
-    --paper: 20 26 31;        /* #141A1F - soft charcoal, not black */
-    --surface: 28 36 43;      /* #1C242B */
-    --line: 40 50 58;
-    --signal: 56 166 175;     /* lightened teal for dark-surface contrast */
-    --signal-strong: 45 150 158;
-    --link: 96 148 246;
+    --ink: 224 234 247;
+    --secondary: 156 174 199;
+    --muted: 120 138 163;
+    --paper: 8 14 26;         /* #080E1A - logo navy background */
+    --surface: 15 23 39;      /* #0F1727 - slightly lifted navy */
+    --line: 30 42 64;
+    --signal: 64 150 255;     /* #4096FF - lightened brand blue for dark-surface contrast */
+    --signal-strong: 96 173 255;
+    --link: 110 163 255;
     --jade: 45 176 140;
     --amber: 214 148 74;
     --rose: 251 113 133;
-    --board: 4 11 14;
+    --board: 3 8 18;          /* #030812 - darkest navy plate */
   }
 
   * {

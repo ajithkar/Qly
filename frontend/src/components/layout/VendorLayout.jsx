@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ListOrdered, CalendarDays, Users, Package,
-  Building2, CreditCard, Menu, X, Moon, Sun, LogOut, MonitorPlay,
+  Building2, CreditCard, Menu, X, Moon, Sun, LogOut,
 } from 'lucide-react';
 
 import { useAuth } from '@/auth/AuthContext';
@@ -10,6 +10,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/Button';
 import { ErrorBoundary } from '@/components/ui/ErrorState';
 import { cn } from '@/lib/cn';
+import logoIcon from '@/assets/logo-icon.png';
 
 /** Nav is filtered by permission so people don't see doors they can't open. */
 const NAV = [
@@ -45,12 +46,10 @@ export default function VendorLayout() {
         )}
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-card bg-gradient-to-br from-signal to-jade text-white shadow-soft">
-              <MonitorPlay className="h-4 w-4" aria-hidden="true" />
-            </span>
+          <Link to="/" className="flex items-center gap-2.5">
+            <img src={logoIcon} alt="" className="h-8 w-8" />
             <span className="font-mono text-sm font-bold tracking-tight">Qly</span>
-          </div>
+          </Link>
           <button
             className="lg:hidden"
             onClick={() => setMenuOpen(false)}
@@ -118,7 +117,10 @@ export default function VendorLayout() {
           <button onClick={() => setMenuOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
-          <span className="font-mono text-sm font-bold">Qly</span>
+          <Link to="/" className="flex items-center gap-2">
+            <img src={logoIcon} alt="" className="h-6 w-6" />
+            <span className="font-mono text-sm font-bold">Qly</span>
+          </Link>
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">

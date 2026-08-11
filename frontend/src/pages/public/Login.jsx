@@ -77,7 +77,7 @@ export default function Login() {
               <Link to="/forgot-password" className="text-muted hover:text-ink">
                 Forgot password
               </Link>
-              <Link to="/register" className="text-signal hover:underline">
+              <Link to="/demo" className="text-signal hover:underline">
                 Create an account
               </Link>
             </div>
