@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Menu, Moon, Sun, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useTheme } from '@/hooks/useTheme';
+import logoIcon from '@/assets/logo-icon.png';
 
 export function Header() {
   const { theme, toggle } = useTheme();
@@ -12,9 +13,7 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-line bg-surface/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-button bg-signal text-sm font-semibold text-white">
-            Q
-          </span>
+          <img src={logoIcon} alt="" className="h-8 w-8" />
           <span className="text-base font-semibold tracking-tight text-ink">Qly</span>
         </Link>
 
