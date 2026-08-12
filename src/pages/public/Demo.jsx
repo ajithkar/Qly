@@ -8,7 +8,7 @@ import { trackEvent } from '@/lib/analytics';
 import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody } from '@/components/ui/Card';
-import { Field, Input, Select } from '@/components/ui/Field';
+import { Field, FileInput, Input, Select } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
 
 const COPY = {
@@ -25,6 +25,8 @@ const COPY = {
 };
 
 const COUNT_OPTIONS = ['1', '2–5', '6–15', '16+'];
+const CERTIFICATE_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg'];
+const CERTIFICATE_MAX_MB = 5;
 
 export default function Demo() {
   const [searchParams] = useSearchParams();
@@ -38,7 +40,17 @@ export default function Demo() {
   const onSubmit = async (values) => {
     setSubmitting(true);
     try {
-      const result = await leads.create({ ...values, segment });
+      const formData = new FormData();
+      formData.append('name', values.name);
+      formData.append('organisation', values.organisation);
+      formData.append('segment', segment);
+      formData.append('phone', values.phone);
+      formData.append('email', values.email);
+      formData.append('department_count', values.department_count ?? '');
+      formData.append('branch_count', values.branch_count ?? '');
+      formData.append('registration_certificate', values.registration_certificate[0]);
+
+      const result = await leads.create(formData);
       trackEvent('lead_submitted', { segment });
       setDone(result.message);
     } catch (error) {
@@ -120,6 +132,34 @@ export default function Demo() {
                       {...register('email', {
                         required: 'We’ll send confirmation here.',
                         pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Enter a valid email.' },
+                      })}
+                    />
+                  </Field>
+
+                  <Field
+                    label="Business registration certificate"
+                    htmlFor="registration_certificate"
+                    error={errors.registration_certificate?.message}
+                    hint="PDF or JPG, up to 5MB"
+                    required
+                  >
+                    <FileInput
+                      id="registration_certificate"
+                      accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg"
+                      invalid={Boolean(errors.registration_certificate)}
+                      {...register('registration_certificate', {
+                        required: 'Upload your business registration certificate.',
+                        validate: (fileList) => {
+                          const file = fileList?.[0];
+                          if (!file) return 'Upload your business registration certificate.';
+                          if (!CERTIFICATE_TYPES.includes(file.type)) {
+                            return 'Only PDF or JPG files are accepted.';
+                          }
+                          if (file.size > CERTIFICATE_MAX_MB * 1024 * 1024) {
+                            return `File must be under ${CERTIFICATE_MAX_MB}MB.`;
+                          }
+                          return true;
+                        },
                       })}
                     />
                   </Field>

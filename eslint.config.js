@@ -16,6 +16,7 @@ export default [
         window: 'readonly', document: 'readonly', localStorage: 'readonly',
         console: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
         WebSocket: 'readonly', fetch: 'readonly', navigator: 'readonly',
+        FormData: 'readonly',
       },
     },
     settings: { react: { version: 'detect' } },
