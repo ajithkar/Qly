@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     # required to get a working default.
     SALES_NOTIFICATION_EMAIL: str = ""
 
+    # --- Lead attachments ---
+    # The demo/trial form collects the vendor's business registration
+    # certificate. No object storage is wired up yet, so it lands on the
+    # API host's local disk.
+    LEAD_UPLOAD_DIR: str = "uploads/leads"
+    LEAD_UPLOAD_MAX_MB: int = 5
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, v):

@@ -33,6 +33,25 @@ export const Textarea = forwardRef(function Textarea({ className, ...rest }, ref
 });
 Textarea.propTypes = { className: PropTypes.string };
 
+export const FileInput = forwardRef(function FileInput({ className, invalid, ...rest }, ref) {
+  return (
+    <input
+      ref={ref}
+      type="file"
+      aria-invalid={invalid || undefined}
+      className={cn(
+        'block w-full text-sm text-muted file:mr-3 file:rounded-card file:border-0 ' +
+          'file:bg-signal/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-signal ' +
+          'hover:file:bg-signal/20',
+        invalid && 'text-rose',
+        className,
+      )}
+      {...rest}
+    />
+  );
+});
+FileInput.propTypes = { className: PropTypes.string, invalid: PropTypes.bool };
+
 /** Label + control + error, wired for screen readers. */
 export function Field({ label, htmlFor, error, hint, required, children }) {
   return (

@@ -57,8 +57,12 @@ def client(monkeypatch):
         yield test_client
 
 
+def _files(name="cert.pdf", content=b"%PDF-1.4 fake certificate", content_type="application/pdf"):
+    return {"registration_certificate": (name, content, content_type)}
+
+
 def test_create_lead_success(client):
-    response = client.post("/api/v1/leads", json=VALID_LEAD)
+    response = client.post("/api/v1/leads", data=VALID_LEAD, files=_files())
     assert response.status_code == 201
     body = response.json()["data"]
     assert body["id"]
@@ -66,10 +70,45 @@ def test_create_lead_success(client):
 
 
 def test_create_lead_rejects_bad_email(client):
-    response = client.post("/api/v1/leads", json={**VALID_LEAD, "email": "not-an-email"})
+    response = client.post(
+        "/api/v1/leads", data={**VALID_LEAD, "email": "not-an-email"}, files=_files()
+    )
     assert response.status_code == 422
 
 
 def test_create_lead_rejects_unknown_segment(client):
-    response = client.post("/api/v1/leads", json={**VALID_LEAD, "segment": "bank"})
+    response = client.post(
+        "/api/v1/leads", data={**VALID_LEAD, "segment": "bank"}, files=_files()
+    )
     assert response.status_code == 422
+
+
+def test_create_lead_requires_certificate(client):
+    response = client.post("/api/v1/leads", data=VALID_LEAD)
+    assert response.status_code == 422
+
+
+def test_create_lead_rejects_unsupported_certificate_type(client):
+    response = client.post(
+        "/api/v1/leads",
+        data=VALID_LEAD,
+        files=_files(name="cert.txt", content=b"not a real cert", content_type="text/plain"),
+    )
+    assert response.status_code == 422
+
+
+def test_create_lead_rejects_oversized_certificate(client, monkeypatch):
+    import app.services.file_storage as file_storage_module
+
+    monkeypatch.setattr(file_storage_module.settings, "LEAD_UPLOAD_MAX_MB", 0)
+    response = client.post("/api/v1/leads", data=VALID_LEAD, files=_files(content=b"x" * 1024))
+    assert response.status_code == 422
+
+
+def test_create_lead_accepts_jpg_certificate(client):
+    response = client.post(
+        "/api/v1/leads",
+        data=VALID_LEAD,
+        files=_files(name="cert.jpg", content=b"\xff\xd8\xff fake jpeg", content_type="image/jpeg"),
+    )
+    assert response.status_code == 201
