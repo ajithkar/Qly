@@ -48,7 +48,7 @@ Benefit.propTypes = {
 export function ClinicsSection() {
   return (
     <section id="for-clinics" className="bg-paper py-20 lg:py-24">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+      <div className="px-4 sm:px-6">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
             For clinics and hospitals

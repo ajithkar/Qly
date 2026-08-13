@@ -12,7 +12,7 @@ const TRUST_ITEMS = [
 
 export function Hero({ onSignIn }) {
   return (
-    <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:grid lg:grid-cols-[55%_45%] lg:items-center lg:gap-12 lg:py-24">
+    <section className="px-4 py-14 sm:px-6 lg:grid lg:grid-cols-[11fr_9fr] lg:items-center lg:gap-12 lg:py-24">
       <div>
         <span className="inline-flex items-center rounded-full bg-signal/10 px-3 py-1 text-xs font-medium text-signal">
           For clinics &amp; hospitals

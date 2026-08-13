@@ -13,10 +13,11 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import FileResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.api.deps import client_ip, get_current_admin, get_db, require_permission
+from app.api.deps import client_ip, get_current_admin, get_db, require_admin_role, require_permission
 from app.core.errors import Conflict, NotFound
 from app.core.permissions import Action, AdminModule
 from app.core.security import create_access_token, utcnow
+from app.models.base import to_object_id, touch
 from app.models.enums import AccountStatus, LeadStatus, TenantStatus
 from app.repositories.catalog import (
     AppointmentRepository,
@@ -29,8 +30,10 @@ from app.repositories.queues import QueueRepository, TokenRepository
 from app.schemas.auth import AdminVendorCreateRequest
 from app.schemas.billing import PlanCreate, PlanUpdate
 from app.schemas.common import PaginationParams, ok, pagination_params, paginate
+from app.schemas.tenant import VendorDeleteRequest
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
+from app.services.file_storage import delete_lead_certificate
 from app.services.stripe_client import get_stripe_client
 from app.services.stripe_service import StripeService
 
@@ -258,6 +261,53 @@ async def reactivate_vendor(
         ip=client_ip(request),
     )
     return ok(updated)
+
+
+@router.delete("/vendors/{tenant_id}")
+async def delete_vendor(
+    tenant_id: str,
+    payload: VendorDeleteRequest,
+    request: Request,
+    admin: Dict[str, Any] = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(require_admin_role("super_admin")),
+) -> Dict[str, Any]:
+    """Super Admin only. The UI already runs the caller through a two-step
+    confirmation; this endpoint adds a third, server-side check by requiring
+    the vendor's own company name to be retyped, so a replayed or scripted
+    call can't delete a vendor without knowing which one."""
+    tenant = await TenantRepository(db).get_by_id(tenant_id)
+    if not tenant:
+        raise NotFound("Vendor not found.")
+
+    expected = (tenant.get("company_name") or tenant.get("slug") or "").strip()
+    if payload.confirm_company_name.strip() != expected:
+        raise Conflict("Company name confirmation does not match.")
+
+    # The lead this vendor was verified from (if any) still holds the
+    # uploaded registration certificate - it must not outlive the vendor.
+    # `update()` drops None values (see BaseRepository.update), so the field
+    # is cleared with a raw collection write rather than through it.
+    lead = await LeadRepository(db).find_one({"tenant_id": tenant_id})
+    if lead and lead.get("registration_certificate_path"):
+        delete_lead_certificate(lead["registration_certificate_path"])
+        await LeadRepository(db).collection.update_one(
+            {"_id": to_object_id(lead["id"])},
+            {"$set": {"registration_certificate_path": None, **touch(admin["id"])}},
+        )
+
+    await TenantRepository(db).soft_delete_by_id(tenant_id, actor_id=admin["id"])
+    await AuditService(db).record(
+        tenant_id=tenant_id,
+        actor_id=admin["id"],
+        actor_email=admin.get("email"),
+        action="delete_vendor",
+        module="admin_vendors",
+        resource_id=tenant_id,
+        previous_value={"company_name": tenant.get("company_name"), "status": tenant.get("status")},
+        ip=client_ip(request),
+    )
+    return ok({"deleted": True})
 
 
 @router.post("/vendors/{tenant_id}/impersonate")

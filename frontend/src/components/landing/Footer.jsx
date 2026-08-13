@@ -21,7 +21,7 @@ const COLUMNS = [
 export function Footer({ onSignIn }) {
   return (
     <footer className="border-t border-line bg-surface">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
+      <div className="px-4 py-14 sm:px-6">
         <div className="grid gap-10 sm:grid-cols-3">
           {COLUMNS.map((column) => (
             <div key={column.heading}>
