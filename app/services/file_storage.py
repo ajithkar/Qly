@@ -48,3 +48,19 @@ async def save_lead_certificate(file: UploadFile) -> str:
     stored_name = f"{uuid.uuid4().hex}{extension}"
     (upload_dir / stored_name).write_bytes(content)
     return str(upload_dir / stored_name)
+
+
+def delete_lead_certificate(path: str) -> None:
+    """Removes a previously-saved certificate from disk, e.g. when the
+    vendor it belongs to is deleted. `path` is a value this module itself
+    wrote to Mongo, but it is resolved and confirmed to stay inside
+    LEAD_UPLOAD_DIR before unlinking regardless, and a missing file is not
+    an error - the outcome the caller wants ("no certificate on disk") is
+    already true."""
+    if not path:
+        return
+    upload_dir = Path(settings.LEAD_UPLOAD_DIR).resolve()
+    candidate = Path(path).resolve()
+    if upload_dir not in candidate.parents:
+        return
+    candidate.unlink(missing_ok=True)
