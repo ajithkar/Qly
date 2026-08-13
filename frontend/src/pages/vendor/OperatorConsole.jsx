@@ -253,7 +253,7 @@ export default function OperatorConsole() {
       {/* The board and the one action that matters */}
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
-          <CallBoard token={current} />
+          <CallBoard token={current} averageServiceMinutes={monitor.average_service_minutes} />
 
           <div className="flex flex-wrap gap-2">
             <Button

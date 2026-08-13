@@ -1,3 +1,6 @@
+import { useState } from 'react';
+
+import { VendorSignInModal } from '@/components/auth/VendorSignInModal';
 import { ClinicsSection } from '@/components/landing/ClinicsSection';
 import { Footer } from '@/components/landing/Footer';
 import { Header } from '@/components/landing/Header';
@@ -13,18 +16,22 @@ import { TrustRow } from '@/components/landing/TrustRow';
  * See src/components/landing/ for the section components.
  */
 export default function Landing() {
+  const [signInOpen, setSignInOpen] = useState(false);
+  const onSignIn = () => setSignInOpen(true);
+
   return (
     <div className="min-h-screen bg-paper">
-      <Header />
+      <Header onSignIn={onSignIn} />
       <main>
-        <Hero />
+        <Hero onSignIn={onSignIn} />
         <HowItWorks />
         <ReassuranceStrip />
         <ClinicsSection />
         <PricingSection />
         <TrustRow />
       </main>
-      <Footer />
+      <Footer onSignIn={onSignIn} />
+      <VendorSignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import PropTypes from 'prop-types';
 import { Menu, Moon, Sun, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useTheme } from '@/hooks/useTheme';
 import logoIcon from '@/assets/logo-icon.png';
 
-export function Header() {
+export function Header({ onSignIn }) {
   const { theme, toggle } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -21,9 +22,9 @@ export function Header() {
           <a href="#for-clinics" className="text-sm text-secondary hover:text-ink">
             For clinics
           </a>
-          <Link to="/login" className="text-sm text-secondary hover:text-ink">
+          <button type="button" onClick={onSignIn} className="text-sm text-secondary hover:text-ink">
             Sign in
-          </Link>
+          </button>
           <Link to="/find">
             <Button size="sm" className="min-h-11">Join a queue</Button>
           </Link>
@@ -76,13 +77,13 @@ export function Header() {
             >
               For clinics
             </a>
-            <Link
-              to="/login"
-              onClick={() => setMenuOpen(false)}
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); onSignIn(); }}
               className="flex min-h-11 items-center text-sm text-secondary hover:text-ink"
             >
               Sign in
-            </Link>
+            </button>
             <Link to="/find" onClick={() => setMenuOpen(false)} className="mt-2">
               <Button className="min-h-11 w-full">Join a queue</Button>
             </Link>
@@ -92,3 +93,7 @@ export function Header() {
     </header>
   );
 }
+
+Header.propTypes = {
+  onSignIn: PropTypes.func.isRequired,
+};

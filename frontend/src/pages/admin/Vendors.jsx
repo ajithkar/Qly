@@ -1,8 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, Check, Copy, CreditCard, KeyRound, Plus, Search } from 'lucide-react';
+import { Building2, Check, Copy, CreditCard, FileText, KeyRound, Plus, Search, Users } from 'lucide-react';
 
 import { admin } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
@@ -37,6 +37,7 @@ async function copyToClipboard(value, kind, setCopied, toast) {
 
 export default function AdminVendors() {
   const { can } = useAuth();
+  const [tab, setTab] = useState('vendors'); // 'vendors' | 'leads'
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -49,6 +50,7 @@ export default function AdminVendors() {
   const listQuery = useQuery({
     queryKey: ['admin', 'vendors', { page, search, status }],
     queryFn: () => admin.vendors({ page, page_size: 20, search: search || undefined, status: status || undefined }),
+    enabled: tab === 'vendors',
   });
 
   const plansQuery = useQuery({
@@ -107,9 +109,9 @@ export default function AdminVendors() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Vendors</h1>
-          <p className="text-sm text-muted">Every organisation on the platform.</p>
+          <p className="text-sm text-muted">Every organisation on the platform, plus sign-ups awaiting review.</p>
         </div>
-        {canCreate && (
+        {tab === 'vendors' && canCreate && (
           <Button onClick={() => setDialogOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Create vendor
@@ -117,6 +119,26 @@ export default function AdminVendors() {
         )}
       </div>
 
+      <div className="flex gap-1 rounded-card border border-line bg-surface p-1 w-fit">
+        <Button
+          variant={tab === 'vendors' ? 'primary' : 'ghost'}
+          size="sm"
+          onClick={() => setTab('vendors')}
+        >
+          <Building2 className="h-4 w-4" aria-hidden="true" />
+          Vendors
+        </Button>
+        <Button
+          variant={tab === 'leads' ? 'primary' : 'ghost'}
+          size="sm"
+          onClick={() => setTab('leads')}
+        >
+          <Users className="h-4 w-4" aria-hidden="true" />
+          Leads
+        </Button>
+      </div>
+
+      {tab === 'vendors' && (
       <Card>
         <CardHeader
           title="All vendors"
@@ -243,10 +265,16 @@ export default function AdminVendors() {
           </>
         )}
       </Card>
+      )}
+
+      {tab === 'leads' && <LeadsPanel />}
 
       <CreateVendorDialog
         open={dialogOpen}
-        plans={plansQuery.data?.data ?? []}
+        // The trial plan activates without a Stripe session (see
+        // StripeService._activate_trial), but this dialog always expects a
+        // checkout_url back - keep it a self-serve-only path for now.
+        plans={(plansQuery.data?.data ?? []).filter((p) => !p.is_trial)}
         onClose={() => setDialogOpen(false)}
         onCreate={(data) => createVendor.mutate(data)}
         loading={createVendor.isPending}
@@ -321,8 +349,21 @@ CopyDialog.propTypes = {
   })).isRequired,
 };
 
-function CreateVendorDialog({ open, plans, onClose, onCreate, loading }) {
-  const [form, setForm] = useState(EMPTY_FORM);
+function CreateVendorDialog({
+  open, plans, onClose, onCreate, loading, initialValues,
+  title = 'Create vendor',
+  description = "The vendor stays pending until they pay - you'll get a payment link to send them next.",
+}) {
+  const [form, setForm] = useState(() => ({ ...EMPTY_FORM, ...initialValues }));
+
+  // Re-seed the form from `initialValues` each time the dialog opens fresh -
+  // this instance is reused across different leads, so a stale prior lead's
+  // values must not leak into the next one. Keyed only on `open`, matching
+  // Dialog's own focus-management effect, so retyping mid-edit never resets.
+  useEffect(() => {
+    if (open) setForm({ ...EMPTY_FORM, ...initialValues });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const set = (key) => (event) => {
     const value = event.target.value;
@@ -330,8 +371,9 @@ function CreateVendorDialog({ open, plans, onClose, onCreate, loading }) {
   };
 
   const close = useCallback(() => {
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, ...initialValues });
     onClose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onClose]);
 
   const valid =
@@ -345,8 +387,8 @@ function CreateVendorDialog({ open, plans, onClose, onCreate, loading }) {
     <Dialog
       open={open}
       onClose={close}
-      title="Create vendor"
-      description="The vendor stays pending until they pay - you'll get a payment link to send them next."
+      title={title}
+      description={description}
       footer={
         <>
           <Button variant="secondary" onClick={close}>Cancel</Button>
@@ -413,4 +455,208 @@ CreateVendorDialog.propTypes = {
   onClose: PropTypes.func.isRequired,
   onCreate: PropTypes.func.isRequired,
   loading: PropTypes.bool,
+  initialValues: PropTypes.object,
+  title: PropTypes.node,
+  description: PropTypes.node,
 };
+
+const LEAD_STATUS_TONE = { pending: 'paused', verified: 'open', rejected: 'closed' };
+
+function LeadsPanel() {
+  const { can } = useAuth();
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [verifyLead, setVerifyLead] = useState(null); // the lead row being converted
+  const [paymentLink, setPaymentLink] = useState(null); // { company_name, checkout_url }
+  const toast = useToast();
+  const queryClient = useQueryClient();
+
+  const listQuery = useQuery({
+    queryKey: ['admin', 'leads', { page, search, status }],
+    queryFn: () => admin.leads({ page, page_size: 20, search: search || undefined, status: status || undefined }),
+  });
+
+  const plansQuery = useQuery({
+    queryKey: ['admin', 'plans', 'all'],
+    queryFn: () => admin.plans({ page_size: 100 }),
+    enabled: Boolean(verifyLead),
+  });
+
+  const verify = useMutation({
+    mutationFn: (data) => admin.verifyLead(verifyLead.id, data),
+    onSuccess: (vendor) => {
+      setVerifyLead(null);
+      setPaymentLink({ company_name: vendor.company_name, checkout_url: vendor.checkout_url });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'leads'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'vendors'] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const reject = useMutation({
+    mutationFn: (id) => admin.rejectLead(id),
+    onSuccess: () => {
+      toast.success('Lead rejected');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'leads'] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const viewCertificate = async (lead) => {
+    try {
+      const blob = await admin.leadCertificate(lead.id);
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener');
+      // The tab has had time to load the blob URL by then; revoking earlier
+      // can race the new tab's fetch of it.
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const canUpdate = can('admin_leads:update');
+
+  return (
+    <>
+      <Card>
+        <CardHeader
+          title="Vendor sign-ups"
+          action={
+            <div className="flex gap-2">
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+                  aria-hidden="true"
+                />
+                <Input
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  placeholder="Search organisation or email"
+                  className="w-56 pl-8"
+                  aria-label="Search leads"
+                />
+              </div>
+              <Select
+                value={status}
+                onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+                className="w-40"
+                aria-label="Filter by status"
+              >
+                <option value="">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="verified">Verified</option>
+                <option value="rejected">Rejected</option>
+              </Select>
+            </div>
+          }
+        />
+        {listQuery.isLoading && <SkeletonRows />}
+        {listQuery.isError && <ErrorState error={listQuery.error} onRetry={listQuery.refetch} />}
+        {listQuery.isSuccess && (
+          <>
+            <Table
+              rows={listQuery.data.data}
+              empty={
+                <EmptyState
+                  icon={Users}
+                  title="No leads yet"
+                  description="Submissions from the public signup form will appear here."
+                />
+              }
+              columns={[
+                {
+                  key: 'organisation',
+                  header: 'Organisation',
+                  render: (r) => <span className="font-medium">{r.organisation}</span>,
+                },
+                {
+                  key: 'contact',
+                  header: 'Contact',
+                  render: (r) => (
+                    <div className="text-sm">
+                      <p>{r.name}</p>
+                      <p className="text-muted">{r.email}</p>
+                      <p className="text-muted">{r.phone}</p>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'segment',
+                  header: 'Segment',
+                  render: (r) => <span className="capitalize text-muted">{r.segment}</span>,
+                },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  render: (r) => <Badge tone={LEAD_STATUS_TONE[r.status] ?? 'neutral'}>{r.status}</Badge>,
+                },
+                {
+                  key: 'created_at',
+                  header: 'Submitted',
+                  render: (r) => <span className="text-muted">{formatDate(r.created_at)}</span>,
+                },
+                {
+                  key: 'certificate',
+                  header: 'Certificate',
+                  render: (r) => (
+                    <Button variant="secondary" size="sm" onClick={() => viewCertificate(r)}>
+                      <FileText className="h-4 w-4" aria-hidden="true" />
+                      View
+                    </Button>
+                  ),
+                },
+                {
+                  key: 'actions',
+                  header: '',
+                  align: 'right',
+                  render: (r) => (
+                    r.status === 'pending' && canUpdate ? (
+                      <div className="flex justify-end gap-2">
+                        <Button variant="secondary" size="sm" onClick={() => setVerifyLead(r)}>
+                          Verify
+                        </Button>
+                        <Button
+                          variant="danger" size="sm"
+                          loading={reject.isPending && reject.variables === r.id}
+                          onClick={() => reject.mutate(r.id)}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    ) : null
+                  ),
+                },
+              ]}
+            />
+            <Pagination meta={listQuery.data.meta} onPageChange={setPage} />
+          </>
+        )}
+      </Card>
+
+      <CreateVendorDialog
+        open={Boolean(verifyLead)}
+        title="Verify lead & create vendor"
+        description="Creates the vendor account from this submission - you'll get a payment link to send them next."
+        plans={(plansQuery.data?.data ?? []).filter((p) => !p.is_trial)}
+        initialValues={verifyLead ? {
+          company_name: verifyLead.organisation,
+          owner_name: verifyLead.name,
+          email: verifyLead.email,
+        } : undefined}
+        onClose={() => setVerifyLead(null)}
+        onCreate={(data) => verify.mutate(data)}
+        loading={verify.isPending}
+      />
+
+      <CopyDialog
+        open={Boolean(paymentLink)}
+        onClose={() => setPaymentLink(null)}
+        title={`Payment link${paymentLink ? ` — ${paymentLink.company_name}` : ''}`}
+        description="Send this to the vendor. Their account activates automatically once Stripe confirms payment."
+        fields={paymentLink ? [{ key: 'link', label: 'Checkout link', value: paymentLink.checkout_url }] : []}
+      />
+    </>
+  );
+}

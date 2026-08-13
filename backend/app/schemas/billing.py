@@ -27,6 +27,9 @@ class PlanCreate(BaseModel):
     export_access: bool = True
     api_access: bool = False
     feature_flags: list[str] = Field(default_factory=list)
+    # A vendor may activate this plan once, without payment, for
+    # StripeService.TRIAL_PERIOD_DAYS. See StripeService._activate_trial.
+    is_trial: bool = False
 
 
 class PlanUpdate(BaseModel):
@@ -43,4 +46,5 @@ class PlanUpdate(BaseModel):
     export_access: Optional[bool] = None
     api_access: Optional[bool] = None
     feature_flags: Optional[list[str]] = None
+    is_trial: Optional[bool] = None
     archived: Optional[bool] = None

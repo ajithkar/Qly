@@ -125,6 +125,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "leads": [
         IndexModel([("created_at", DESCENDING)]),
         IndexModel([("segment", ASCENDING), ("created_at", DESCENDING)]),
+        IndexModel([("status", ASCENDING), ("created_at", DESCENDING)]),
     ],
 }
 
@@ -135,3 +136,15 @@ async def ensure_indexes() -> None:
         if models:
             await db[collection].create_indexes(models)
     logger.info("indexes_ensured", extra={"collections": len(INDEXES)})
+
+    # Backfill leads captured before the `status` field existed - the field
+    # is now load-bearing (admin review, the status index above), so every
+    # document needs it rather than every reader defending against its
+    # absence. Idempotent: a no-op once every lead has been touched.
+    from app.models.enums import LeadStatus
+
+    backfilled = await db["leads"].update_many(
+        {"status": {"$exists": False}}, {"$set": {"status": LeadStatus.PENDING.value}}
+    )
+    if backfilled.modified_count:
+        logger.info("leads_status_backfilled", extra={"count": backfilled.modified_count})

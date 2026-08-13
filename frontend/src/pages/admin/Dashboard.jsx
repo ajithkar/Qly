@@ -21,8 +21,7 @@ export default function AdminDashboard() {
   if (query.isError) return <ErrorState error={query.error} onRetry={query.refetch} />;
 
   const d = query.data;
-  const money = (value) =>
-    `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const money = (value) => `LKR ${value.toLocaleString()}`;
 
   return (
     <div className="space-y-5">

@@ -20,9 +20,9 @@ export default {
         board: 'rgb(var(--board) / <alpha-value>)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        sans: ['Manrope', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
-        display: ['Lexend', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['Lexend', 'Manrope', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         token: ['clamp(3.5rem, 9vw, 7rem)', { lineHeight: '0.9', letterSpacing: '-0.04em' }],

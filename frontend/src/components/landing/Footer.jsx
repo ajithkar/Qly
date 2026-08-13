@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import PropTypes from 'prop-types';
 
 const COLUMNS = [
   {
@@ -12,12 +13,12 @@ const COLUMNS = [
     heading: 'For clinics',
     links: [
       { label: 'See a demo', to: '/demo' },
-      { label: 'Sign in', to: '/login' },
+      { label: 'Sign in', action: 'signin' },
     ],
   },
 ];
 
-export function Footer() {
+export function Footer({ onSignIn }) {
   return (
     <footer className="border-t border-line bg-surface">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
@@ -28,9 +29,18 @@ export function Footer() {
               <ul className="mt-3 space-y-2.5">
                 {column.links.map((link) => (
                   <li key={link.label}>
-                    <Link to={link.to} className="text-sm text-secondary hover:text-ink">
-                      {link.label}
-                    </Link>
+                    {link.action === 'signin' ? (
+                      <button
+                        type="button" onClick={onSignIn}
+                        className="text-sm text-secondary hover:text-ink"
+                      >
+                        {link.label}
+                      </button>
+                    ) : (
+                      <Link to={link.to} className="text-sm text-secondary hover:text-ink">
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -52,3 +62,7 @@ export function Footer() {
     </footer>
   );
 }
+
+Footer.propTypes = {
+  onSignIn: PropTypes.func.isRequired,
+};
