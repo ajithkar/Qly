@@ -16,7 +16,7 @@ const PLANS = [
   {
     code: 'starter',
     name: 'Starter',
-    price: 'LKR 8,700',
+    price: 'LKR 3,009',
     period: '/mo',
     features: ['2 branches', '10 providers', '10 staff accounts', '5,000 tokens / mo', 'Reports & export'],
     cta: { label: 'Get started', to: '/demo' },
@@ -24,7 +24,7 @@ const PLANS = [
   {
     code: 'business',
     name: 'Business',
-    price: 'LKR 29,700',
+    price: 'LKR 9,000',
     period: '/mo',
     features: ['10 branches', '50 providers', '50 staff accounts', '50,000 tokens / mo', 'Reports & export', 'API access'],
     cta: { label: 'Get started', to: '/demo' },
@@ -33,7 +33,8 @@ const PLANS = [
   {
     code: 'enterprise',
     name: 'Enterprise',
-    price: 'Custom',
+    price: 'LKR 21,000',
+    period: '/mo',
     features: ['Unlimited branches', 'Unlimited providers & staff', 'Unlimited tokens', 'Reports & export', 'API access', 'SSO'],
     cta: { label: 'Contact us', to: '/demo' },
   },
