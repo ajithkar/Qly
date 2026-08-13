@@ -24,6 +24,12 @@ class AccountStatus(str, Enum):
     SUSPENDED = "suspended"
 
 
+class LeadStatus(str, Enum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
 class PaymentMode(str, Enum):
     """Resolved product decision: payment mode is configured per service."""
     PREPAID_ONLINE = "prepaid_online"

@@ -13,6 +13,7 @@ from app.api.deps import get_db
 from app.core.config import settings
 from app.core.errors import ValidationError
 from app.core.rate_limit import auth_rate_limit
+from app.models.enums import LeadStatus
 from app.repositories.leads import LeadRepository
 from app.schemas.common import ok
 from app.schemas.lead import LeadCreateRequest
@@ -57,7 +58,11 @@ async def create_lead(
 
     certificate_path = await save_lead_certificate(registration_certificate)
     lead = await LeadRepository(db).create(
-        {**payload.model_dump(), "registration_certificate_path": certificate_path}
+        {
+            **payload.model_dump(),
+            "registration_certificate_path": certificate_path,
+            "status": LeadStatus.PENDING.value,
+        }
     )
 
     # A real SMTP send takes seconds — the person filling out this form

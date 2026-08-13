@@ -115,6 +115,14 @@ class PlanRepository(BaseRepository):
     async def get_by_code(self, code: str) -> Optional[dict]:
         return serialize(await self.collection.find_one({"code": code, "archived": False}))
 
+    async def list_active(self) -> List[dict]:
+        """Plans a vendor may pick from, cheapest first - the order the
+        upgrade cards in the billing dashboard are shown in."""
+        cursor = self.collection.find(
+            {"archived": False, "is_deleted": False}
+        ).sort("sort_order", 1)
+        return [serialize(d) for d in await cursor.to_list(length=100)]
+
 
 class SubscriptionRepository(BaseRepository):
     collection_name = "subscriptions"

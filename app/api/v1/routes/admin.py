@@ -6,22 +6,25 @@ explicitly guarded by an admin permission; nothing falls back to tenant scope.
 from __future__ import annotations
 
 import json
+from pathlib import Path as FilePath
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import FileResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.api.deps import client_ip, get_current_admin, get_db, require_permission
 from app.core.errors import Conflict, NotFound
 from app.core.permissions import Action, AdminModule
 from app.core.security import create_access_token, utcnow
-from app.models.enums import AccountStatus, TenantStatus
+from app.models.enums import AccountStatus, LeadStatus, TenantStatus
 from app.repositories.catalog import (
     AppointmentRepository,
     PlanRepository,
     SubscriptionRepository,
 )
 from app.repositories.identity import TenantRepository, UserRepository
+from app.repositories.leads import LeadRepository
 from app.repositories.queues import QueueRepository, TokenRepository
 from app.schemas.auth import AdminVendorCreateRequest
 from app.schemas.billing import PlanCreate, PlanUpdate
@@ -307,6 +310,121 @@ async def impersonate_vendor(
             "notice": "This session is impersonated and fully audit-logged.",
         }
     )
+
+
+# ----------------------------------------------------------------- leads
+_CERTIFICATE_MEDIA_TYPES = {".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+
+@router.get("/leads")
+async def list_leads(
+    params: PaginationParams = Depends(pagination_params),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    segment: Optional[str] = Query(None),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(require_permission(AdminModule.LEADS.value, Action.VIEW)),
+) -> Dict[str, Any]:
+    filters: Dict[str, Any] = {}
+    if status_filter:
+        filters["status"] = status_filter
+    if segment:
+        filters["segment"] = segment
+    items, total = await LeadRepository(db).list(params, filters=filters)
+    return paginate(items, total, params)
+
+
+@router.get("/leads/{lead_id}/certificate")
+async def lead_certificate(
+    lead_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(require_permission(AdminModule.LEADS.value, Action.VIEW)),
+) -> FileResponse:
+    lead = await LeadRepository(db).get_by_id(lead_id)
+    if not lead:
+        raise NotFound("Lead not found.")
+
+    path = FilePath(lead.get("registration_certificate_path") or "")
+    if not path.is_file():
+        raise NotFound("The registration certificate is no longer available.")
+
+    media_type = _CERTIFICATE_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(path, media_type=media_type, filename=path.name)
+
+
+@router.post("/leads/{lead_id}/verify", status_code=status.HTTP_201_CREATED)
+async def verify_lead(
+    lead_id: str,
+    payload: AdminVendorCreateRequest,
+    request: Request,
+    admin: Dict[str, Any] = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(require_permission(AdminModule.LEADS.value, Action.UPDATE)),
+) -> Dict[str, Any]:
+    """Verifying a lead creates the vendor account directly - the same
+    onboarding path as the "Create vendor" dialog, just pre-filled from the
+    lead's submission instead of typed in from scratch."""
+    lead = await LeadRepository(db).get_by_id(lead_id)
+    if not lead:
+        raise NotFound("Lead not found.")
+    if lead["status"] != LeadStatus.PENDING.value:
+        raise Conflict("This lead has already been processed.")
+
+    tenant = await AuthService(db).create_vendor_by_admin(payload.model_dump())
+    checkout = await StripeService(db, get_stripe_client()).create_checkout_session(
+        tenant["id"], payload.plan_code, payload.billing_cycle
+    )
+    await LeadRepository(db).update(
+        lead_id,
+        {"status": LeadStatus.VERIFIED.value, "tenant_id": tenant["id"]},
+        actor_id=admin["id"],
+    )
+    await AuditService(db).record(
+        tenant_id=tenant["id"],
+        actor_id=admin["id"],
+        actor_email=admin.get("email"),
+        action="verify_lead",
+        module="admin_leads",
+        resource_id=lead_id,
+        updated_value={"tenant_id": tenant["id"], "status": LeadStatus.VERIFIED.value},
+        ip=client_ip(request),
+    )
+    return ok(
+        {
+            **tenant,
+            "checkout_url": checkout["checkout_url"],
+            "checkout_session_id": checkout["session_id"],
+            "lead_id": lead_id,
+        }
+    )
+
+
+@router.post("/leads/{lead_id}/reject")
+async def reject_lead(
+    lead_id: str,
+    request: Request,
+    admin: Dict[str, Any] = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: Dict[str, Any] = Depends(require_permission(AdminModule.LEADS.value, Action.UPDATE)),
+) -> Dict[str, Any]:
+    lead = await LeadRepository(db).get_by_id(lead_id)
+    if not lead:
+        raise NotFound("Lead not found.")
+    if lead["status"] != LeadStatus.PENDING.value:
+        raise Conflict("This lead has already been processed.")
+
+    updated = await LeadRepository(db).update(
+        lead_id, {"status": LeadStatus.REJECTED.value}, actor_id=admin["id"]
+    )
+    await AuditService(db).record(
+        tenant_id=None,
+        actor_id=admin["id"],
+        actor_email=admin.get("email"),
+        action="reject_lead",
+        module="admin_leads",
+        resource_id=lead_id,
+        ip=client_ip(request),
+    )
+    return ok(updated)
 
 
 # ----------------------------------------------------------------- plans

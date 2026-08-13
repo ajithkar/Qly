@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -51,6 +52,9 @@ class StripeService:
 
     # Grace window before a past-due subscription suspends the tenant.
     DUNNING_GRACE_DAYS = 7
+
+    # Length of the one-time, no-payment trial (see _activate_trial).
+    TRIAL_PERIOD_DAYS = 30
 
     def __init__(self, db: AsyncIOMotorDatabase, client: Optional[Any] = None) -> None:
         self.db = db
@@ -115,6 +119,17 @@ class StripeService:
         plan = await self.plans.get_by_code(plan_code)
         if not plan:
             raise NotFound("Plan not found.")
+
+        if plan.get("is_trial"):
+            # No payment involved - and no repeated free rides, since a
+            # tenant can only ever activate a trial plan once.
+            if tenant.get("trial_used"):
+                raise Conflict(
+                    "You've already used your free trial. Choose a paid plan to continue.",
+                    code="trial_already_used",
+                )
+            return await self._activate_trial(tenant, plan)
+
         if billing_cycle not in ("monthly", "yearly"):
             raise ValidationError("Billing cycle must be 'monthly' or 'yearly'.")
 
@@ -130,7 +145,7 @@ class StripeService:
             plan_code=plan_code,
             billing_cycle=billing_cycle,
             amount=plan["yearly_price"] if billing_cycle == "yearly" else plan["monthly_price"],
-            currency=tenant.get("currency", "USD"),
+            currency=tenant.get("currency", "LKR"),
         )
         # Deliberately NOT activating anything here.
         logger.info(
@@ -147,7 +162,59 @@ class StripeService:
                 f"Complete your payment to activate your account:\n{session['url']}\n\n"
                 "This link will expire - if it does by the time you get to it, ask us for a new one.",
             )
-        return {"checkout_url": session["url"], "session_id": session["id"]}
+        return {
+            "checkout_url": session["url"],
+            "session_id": session["id"],
+            "activated": False,
+            "trial_ends_at": None,
+        }
+
+    async def _activate_trial(self, tenant: Dict[str, Any], plan: Dict[str, Any]) -> Dict[str, Any]:
+        """Grant the one-time free trial immediately - there is no payment to
+        confirm, so unlike the paid path this is the source of truth itself
+        rather than something a webhook later validates."""
+        tenant_id = tenant["id"]
+        trial_ends_at = utcnow() + timedelta(days=self.TRIAL_PERIOD_DAYS)
+
+        await self.subscriptions.collection.update_one(
+            {"tenant_id": tenant_id},
+            {
+                "$set": {
+                    "tenant_id": tenant_id,
+                    "plan_code": plan["code"],
+                    "billing_cycle": "monthly",
+                    "stripe_customer_id": None,
+                    "stripe_subscription_id": None,
+                    "stripe_status": "trialing",
+                    "trial_ends_at": trial_ends_at,
+                    "past_due_since": None,
+                    "cancel_at_period_end": False,
+                    "activated_at": utcnow(),
+                    "updated_at": utcnow(),
+                },
+                "$setOnInsert": {"created_at": utcnow()},
+            },
+            upsert=True,
+        )
+        await self.tenants.update(
+            tenant_id,
+            {
+                "status": TenantStatus.ACTIVE.value,
+                "plan_code": plan["code"],
+                "trial_used": True,
+            },
+        )
+        logger.info(
+            "trial_activated",
+            extra={"tenant_id": tenant_id, "plan_code": plan["code"]},
+        )
+        await self._provision_owner_if_pending(tenant_id)
+        return {
+            "checkout_url": None,
+            "session_id": None,
+            "activated": True,
+            "trial_ends_at": trial_ends_at.isoformat(),
+        }
 
     # ------------------------------------------------------------------
     # Webhook processing

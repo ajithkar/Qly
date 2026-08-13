@@ -14,7 +14,7 @@ class VendorRegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     plan_code: str = Field(..., min_length=2, max_length=40)
     timezone: str = Field(default="UTC", max_length=64)
-    currency: str = Field(default="USD", min_length=3, max_length=3)
+    currency: str = Field(default="LKR", min_length=3, max_length=3)
     accepted_terms_version: str = Field(..., max_length=20)
     accepted_privacy_version: str = Field(..., max_length=20)
 
@@ -29,7 +29,7 @@ class AdminVendorCreateRequest(BaseModel):
     email: EmailStr
     plan_code: str = Field(..., min_length=2, max_length=40)
     timezone: str = Field(default="UTC", max_length=64)
-    currency: str = Field(default="USD", min_length=3, max_length=3)
+    currency: str = Field(default="LKR", min_length=3, max_length=3)
     billing_cycle: str = Field(default="monthly", pattern="^(monthly|yearly)$")
 
 
