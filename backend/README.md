@@ -68,8 +68,7 @@ cp .env.example .env
 # Set JWT_SECRET_KEY. Generate one with:
 python -c "import secrets; print(secrets.token_urlsafe(64))"
 
-# Start MongoDB and Redis (or use the compose file)
-docker compose -f deploy/docker-compose.yml up -d mongo redis
+# Start MongoDB and Redis (locally installed, or point at hosted instances)
 
 python -m scripts.seed          # plans, categories, Super Admin
 uvicorn app.main:app --reload
@@ -117,7 +116,7 @@ app/
     v1/routes/   endpoint modules
   websocket/     connection manager (Redis fan-out) + endpoints
 scripts/seed.py  baseline data
-deploy/          Dockerfile, compose, nginx, systemd
+deploy/          systemd unit (self-hosted VPS only)
 tests/
 ```
 
@@ -174,13 +173,12 @@ See `.env.example`. The ones that matter in production:
 
 ## Deployment
 
-```bash
-docker compose -f deploy/docker-compose.yml up --build
-```
+Deployed on Render, building directly from `requirements.txt` - no
+container image involved.
 
-Or on a VPS: `deploy/nginx.conf` (note the separate `/ws/` block — WebSockets
-need the upgrade headers and a long read timeout) plus
-`deploy/qly-api.service` for systemd.
+For a self-hosted VPS instead, `deploy/qly-api.service` runs the app under
+systemd; put a reverse proxy in front with WebSocket upgrade headers and a
+long read timeout on the `/ws/` path.
 
 **Scaling note:** WebSocket broadcasts go through Redis pub/sub specifically so
 multiple app instances work. Without it, a client connected to instance B would

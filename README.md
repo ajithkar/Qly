@@ -10,12 +10,16 @@ FastAPI · MongoDB · Redis · WebSockets · React 19 · Vite · Tailwind
 
 ## Run it
 
+Backend and frontend run as two local processes - see `backend/README.md`
+and `frontend/README.md` for the full quick start, or just:
+
 ```bash
-cp .env.example .env
-docker compose up --build
+make install
+make api    # http://localhost:8000, in one terminal
+make web    # http://localhost:5173, in another
 ```
 
-Open **http://localhost:8080** and sign in:
+Sign in:
 
 | | |
 |---|---|
@@ -150,6 +154,5 @@ qly/
   frontend/         React — see frontend/README.md
   scripts/
     check_contract.py
-  docker-compose.yml
   Makefile
 ```

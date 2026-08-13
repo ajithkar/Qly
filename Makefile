@@ -1,10 +1,8 @@
-.PHONY: help install dev api web test check seed up down clean
+.PHONY: help install api web test check seed clean
 
 help:
 	@echo "Qly — queue & appointment platform"
 	@echo ""
-	@echo "  make up        Run the whole stack in Docker (http://localhost:8080)"
-	@echo "  make down      Stop it"
 	@echo "  make install   Install backend + frontend dependencies locally"
 	@echo "  make api       Run the API only (needs Mongo + Redis running)"
 	@echo "  make web       Run the frontend dev server"
@@ -15,8 +13,6 @@ help:
 install:
 	cd backend && pip install -r requirements-dev.txt
 	cd frontend && npm install
-
-dev: up
 
 api:
 	cd backend && uvicorn app.main:app --reload
@@ -34,13 +30,6 @@ test:
 check:
 	python3 scripts/check_contract.py
 
-up:
-	docker compose up --build
-
-down:
-	docker compose down
-
 clean:
-	docker compose down -v
 	rm -rf frontend/node_modules frontend/dist
 	find backend -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
