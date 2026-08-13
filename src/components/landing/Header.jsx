@@ -12,7 +12,7 @@ export function Header({ onSignIn }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-surface/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+      <div className="flex h-16 items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-2">
           <img src={logoIcon} alt="" className="h-8 w-8" />
           <span className="text-base font-semibold tracking-tight text-ink">Qly</span>

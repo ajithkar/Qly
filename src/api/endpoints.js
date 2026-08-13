@@ -246,6 +246,13 @@ export const admin = {
     request({ url: `/admin/vendors/${id}/suspend`, method: 'POST' }, s.adminVendor),
   reactivateVendor: (id) =>
     request({ url: `/admin/vendors/${id}/reactivate`, method: 'POST' }, s.adminVendor),
+  /** Restricted to Super Admin. The server re-checks that `confirmCompanyName`
+   * matches the vendor's own name before soft-deleting it. */
+  deleteVendor: (id, confirmCompanyName) =>
+    request(
+      { url: `/admin/vendors/${id}`, method: 'DELETE', data: { confirm_company_name: confirmCompanyName } },
+      z.object({ deleted: z.boolean() }),
+    ),
   impersonateVendor: (id) =>
     request({ url: `/admin/vendors/${id}/impersonate`, method: 'POST' },
       z.object({

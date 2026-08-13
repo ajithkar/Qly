@@ -3,7 +3,7 @@ import { Car } from 'lucide-react';
 export function ReassuranceStrip() {
   return (
     <section className="bg-signal/5">
-      <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:py-20">
+      <div className="grid items-center gap-8 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:py-20">
         <p className="text-xl font-semibold leading-[1.4] tracking-tight text-ink sm:text-2xl">
           Sit in your car, run an errand, or wait at home. Qly holds your place.
         </p>

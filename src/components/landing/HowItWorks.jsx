@@ -40,7 +40,7 @@ Step.propTypes = {
 
 export function HowItWorks() {
   return (
-    <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-24">
+    <section className="px-4 py-20 sm:px-6 lg:py-24">
       <h2 className="text-center text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
         How it works
       </h2>
