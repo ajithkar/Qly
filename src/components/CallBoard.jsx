@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
-import { cn } from '@/lib/cn';
+import { cn, formatCountdown, parseServerDate } from '@/lib/cn';
 
 /**
  * The call board.
@@ -14,9 +14,11 @@ import { cn } from '@/lib/cn';
  * an operator glancing back at the screen needs to know the call registered.
  * It fires three times and stops, and is suppressed under reduced-motion.
  */
-export function CallBoard({ token, label = 'Now serving', size = 'lg' }) {
+export function CallBoard({ token, averageServiceMinutes, label = 'Now serving', size = 'lg' }) {
   const [flash, setFlash] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const tokenNumber = token?.token_number;
+  const calledAt = token?.called_at;
 
   useEffect(() => {
     if (!tokenNumber) return undefined;
@@ -25,7 +27,20 @@ export function CallBoard({ token, label = 'Now serving', size = 'lg' }) {
     return () => clearTimeout(timer);
   }, [tokenNumber]);
 
+  // Ticks the balance-time countdown once a second while someone is
+  // actually being served - this is the one number the doctor glances at
+  // to know how much of the appointment slot is left.
+  useEffect(() => {
+    if (!calledAt) return undefined;
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [calledAt]);
+
   const isEmpty = !tokenNumber;
+  const balanceSeconds = calledAt && averageServiceMinutes
+    ? averageServiceMinutes * 60 - (now - parseServerDate(calledAt).getTime()) / 1000
+    : null;
 
   return (
     <div
@@ -54,6 +69,16 @@ export function CallBoard({ token, label = 'Now serving', size = 'lg' }) {
         <p className="mt-2 truncate text-sm text-white/60">{token.customer_name}</p>
       )}
 
+      {balanceSeconds !== null && (
+        <p className="mt-2 font-mono text-sm tabular text-white/60">
+          Balance time{' '}
+          <span className={cn('font-bold', balanceSeconds < 0 ? 'text-amber' : 'text-white')}>
+            {balanceSeconds < 0 && '+'}
+            {formatCountdown(Math.abs(balanceSeconds))}
+          </span>
+        </p>
+      )}
+
       {isEmpty && (
         <p className="mt-2 text-sm text-white/40">
           Nobody has been called yet
@@ -76,7 +101,9 @@ CallBoard.propTypes = {
   token: PropTypes.shape({
     token_number: PropTypes.string,
     customer_name: PropTypes.string,
+    called_at: PropTypes.string,
   }),
+  averageServiceMinutes: PropTypes.number,
   label: PropTypes.string,
   size: PropTypes.oneOf(['lg', 'sm']),
 };

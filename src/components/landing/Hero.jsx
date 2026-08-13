@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import PropTypes from 'prop-types';
 import { ArrowRight, Lock, Smartphone, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { LiveTokenCard } from './LiveTokenCard';
@@ -9,7 +10,7 @@ const TRUST_ITEMS = [
   { icon: Lock, label: 'Your details stay private' },
 ];
 
-export function Hero() {
+export function Hero({ onSignIn }) {
   return (
     <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:grid lg:grid-cols-[55%_45%] lg:items-center lg:gap-12 lg:py-24">
       <div>
@@ -31,11 +32,12 @@ export function Hero() {
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Button>
           </Link>
-          <Link to="/login">
-            <Button variant="secondary" size="lg" className="min-h-11 w-full sm:w-auto">
-              I Run a Clinic
-            </Button>
-          </Link>
+          <Button
+            variant="secondary" size="lg" className="min-h-11 w-full sm:w-auto"
+            onClick={onSignIn}
+          >
+            I Run a Clinic
+          </Button>
         </div>
 
         <ul className="mt-6 flex flex-col flex-wrap gap-x-6 gap-y-2 text-sm text-muted sm:flex-row sm:items-center">
@@ -54,3 +56,7 @@ export function Hero() {
     </section>
   );
 }
+
+Hero.propTypes = {
+  onSignIn: PropTypes.func.isRequired,
+};

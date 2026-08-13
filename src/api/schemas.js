@@ -232,6 +232,7 @@ export const plan = z.object({
   export_access: z.boolean().default(true),
   api_access: z.boolean().default(false),
   feature_flags: z.array(z.string()).default([]),
+  is_trial: z.boolean().default(false),
   archived: z.boolean().default(false),
 });
 
@@ -297,4 +298,18 @@ export const notification = z.object({
 export const lead = z.object({
   id: z.string(),
   message: z.string(),
+});
+
+export const adminLead = z.object({
+  id: z.string(),
+  name: z.string(),
+  organisation: z.string(),
+  segment: z.enum(['clinic', 'hospital']),
+  phone: z.string(),
+  email: z.string(),
+  department_count: z.string().nullish(),
+  branch_count: z.string().nullish(),
+  status: z.enum(['pending', 'verified', 'rejected']),
+  tenant_id: z.string().nullish(),
+  created_at: z.string().nullish(),
 });

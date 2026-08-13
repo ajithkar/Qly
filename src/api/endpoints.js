@@ -3,7 +3,7 @@
  * Components never build a URL or call axios directly.
  */
 import { z } from 'zod';
-import { request, requestPage } from './client';
+import { http, request, requestPage } from './client';
 import * as s from './schemas';
 
 // --- auth ---------------------------------------------------------------
@@ -189,7 +189,14 @@ export const publicQueue = {
 
 // --- leads ----------------------------------------------------------------
 export const leads = {
-  create: (data) => request({ url: '/leads', method: 'POST', data }, s.lead),
+  // `data` is a FormData (file upload). The client's default JSON
+  // Content-Type header must be cleared here, or axios JSON-stringifies
+  // the FormData instead of sending it as multipart — the backend then
+  // sees no multipart boundary and every Form(...) field reads as missing.
+  create: (data) => request(
+    { url: '/leads', method: 'POST', data, headers: { 'Content-Type': undefined } },
+    s.lead,
+  ),
 };
 
 // --- billing ------------------------------------------------------------
@@ -201,9 +208,20 @@ export const billing = {
         plan: z.record(z.unknown()).nullish(),
         tenant_status: z.string().nullish(),
       })),
+  /** Every plan a vendor can request to switch to, cheapest first. The
+   * trial plan drops out of this list once already used. */
+  plans: () => request({ url: '/vendor/plans' }, z.array(s.plan)),
+  /** For a trial plan this activates immediately (`activated: true`,
+   * no `checkout_url`) - every other plan returns a Stripe URL to redirect
+   * to instead, and stays unactivated until the webhook confirms payment. */
   checkout: (data) =>
     request({ url: '/vendor/checkout', method: 'POST', data },
-      z.object({ checkout_url: z.string(), session_id: z.string() })),
+      z.object({
+        checkout_url: z.string().nullable(),
+        session_id: z.string().nullable(),
+        activated: z.boolean().default(false),
+        trial_ends_at: z.string().nullable().optional(),
+      })),
 };
 
 // --- admin ----------------------------------------------------------------
@@ -237,6 +255,19 @@ export const admin = {
         expires_in: z.number(),
         notice: z.string().nullish(),
       })),
+
+  leads: (params) => requestPage({ url: '/admin/leads', params }, s.adminLead),
+  /** Verifying a lead creates the vendor directly - same shape as createVendor,
+   * just scoped to the lead being converted. */
+  verifyLead: (id, data) =>
+    request({ url: `/admin/leads/${id}/verify`, method: 'POST', data },
+      s.adminVendor.extend({ checkout_url: z.string(), checkout_session_id: z.string(), lead_id: z.string() })),
+  rejectLead: (id) =>
+    request({ url: `/admin/leads/${id}/reject`, method: 'POST' }, s.adminLead),
+  /** Not JSON, so it bypasses `request()` - the caller turns this blob into
+   * an object URL to open the certificate in a new tab. */
+  leadCertificate: (id) =>
+    http.get(`/admin/leads/${id}/certificate`, { responseType: 'blob' }).then((r) => r.data),
 
   plans: (params) => requestPage({ url: '/admin/plans', params }, s.plan),
   createPlan: (data) => request({ url: '/admin/plans', method: 'POST', data }, s.plan),
