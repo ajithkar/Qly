@@ -3,11 +3,14 @@ import { cn } from '@/lib/cn';
 import { Loader2 } from 'lucide-react';
 
 const VARIANTS = {
-  primary: 'bg-signal text-white hover:brightness-110 active:brightness-95',
-  secondary: 'bg-surface text-ink border border-line hover:bg-paper',
-  ghost: 'text-muted hover:text-ink hover:bg-paper',
-  danger: 'bg-rose text-white hover:brightness-110',
-  jade: 'bg-jade text-white hover:brightness-110',
+  primary:
+    'bg-signal text-white shadow-soft hover:bg-signal-strong hover:shadow-elevated hover:-translate-y-0.5 active:translate-y-0',
+  secondary:
+    'bg-surface text-ink border border-line shadow-soft hover:bg-paper hover:shadow-elevated hover:-translate-y-0.5 active:translate-y-0',
+  ghost: 'text-secondary hover:text-ink hover:bg-paper',
+  danger:
+    'bg-rose text-white shadow-soft hover:brightness-110 hover:shadow-elevated hover:-translate-y-0.5 active:translate-y-0',
+  jade: 'bg-jade text-white shadow-soft hover:brightness-110 hover:shadow-elevated hover:-translate-y-0.5 active:translate-y-0',
 };
 
 const SIZES = {
@@ -29,8 +32,8 @@ export function Button({
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-card font-medium',
-        'transition-colors disabled:opacity-45 disabled:cursor-not-allowed',
+        'inline-flex items-center justify-center gap-2 rounded-button font-medium',
+        'transition duration-150 disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-soft',
         VARIANTS[variant],
         SIZES[size],
         className,

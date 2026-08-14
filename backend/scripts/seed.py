@@ -18,8 +18,10 @@ from app.db.mongo import close_mongo_connection, connect_to_mongo, get_database
 
 PLANS = [
     {
+        # Code stays "free" so existing tenants/subscriptions referencing it
+        # are unaffected - only the name and framing change to a trial.
         "code": "free",
-        "name": "Free",
+        "name": "1-Month Trial",
         "monthly_price": 0,
         "yearly_price": 0,
         "max_branches": 1,
@@ -32,12 +34,15 @@ PLANS = [
         "export_access": False,
         "api_access": False,
         "feature_flags": [],
+        # A vendor may activate this plan once, without payment. See
+        # StripeService._activate_trial / TRIAL_PERIOD_DAYS.
+        "is_trial": True,
     },
     {
         "code": "starter",
         "name": "Starter",
-        "monthly_price": 29,
-        "yearly_price": 290,
+        "monthly_price": 3009,
+        "yearly_price": 30090,
         "max_branches": 2,
         "max_providers": 10,
         "max_staff": 10,
@@ -52,8 +57,8 @@ PLANS = [
     {
         "code": "business",
         "name": "Business",
-        "monthly_price": 99,
-        "yearly_price": 990,
+        "monthly_price": 9000,
+        "yearly_price": 90000,
         "max_branches": 10,
         "max_providers": 50,
         "max_staff": 50,
@@ -68,8 +73,8 @@ PLANS = [
     {
         "code": "enterprise",
         "name": "Enterprise",
-        "monthly_price": 299,
-        "yearly_price": 2990,
+        "monthly_price": 21000,
+        "yearly_price": 210000,
         # None means unlimited - see PlanService.enforce_limit.
         "max_branches": None,
         "max_providers": None,
@@ -180,7 +185,7 @@ async def seed_demo(db) -> None:
             "owner_name": "Demo Owner",
             "business_type": "Clinics",
             "timezone": "UTC",
-            "currency": "USD",
+            "currency": "LKR",
             "language": "en",
             "status": "active",
             "plan_code": "business",

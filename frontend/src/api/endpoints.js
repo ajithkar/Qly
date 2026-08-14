@@ -3,7 +3,7 @@
  * Components never build a URL or call axios directly.
  */
 import { z } from 'zod';
-import { request, requestPage } from './client';
+import { http, request, requestPage } from './client';
 import * as s from './schemas';
 
 // --- auth ---------------------------------------------------------------
@@ -23,6 +23,12 @@ export const auth = {
   resetPassword: (body) =>
     request({ url: '/auth/reset-password', method: 'POST', data: body },
       z.object({ reset: z.boolean() })),
+  changePassword: (body) =>
+    request({ url: '/auth/change-password', method: 'POST', data: body },
+      z.object({ changed: z.boolean() })),
+  acceptInvite: (body) =>
+    request({ url: '/auth/accept-invite', method: 'POST', data: body },
+      z.object({ activated: z.boolean() })),
   googleLoginUrl: () =>
     request({ url: '/auth/google/login' },
       z.object({ authorization_url: z.string(), state: z.string() })),
@@ -31,6 +37,9 @@ export const auth = {
       s.tokenPair.extend({ user: z.object({ id: z.string(), name: z.string().nullish() }) })),
   adminLogin: (body) =>
     request({ url: '/admin/auth/login', method: 'POST', data: body }, s.tokenPair),
+  /** Redeems a shared Operator Console one-time code. */
+  consoleAccess: (body) =>
+    request({ url: '/auth/console-access', method: 'POST', data: body }, s.tokenPair),
 };
 
 // --- vendor catalog -----------------------------------------------------
@@ -63,12 +72,17 @@ export const queues = {
   list: (params) => requestPage({ url: '/vendor/queues', params }, s.queue),
   get: (id) => request({ url: `/vendor/queues/${id}` }, s.queue),
   create: (data) => request({ url: '/vendor/queues', method: 'POST', data }, s.queue),
+  update: (id, data) => request({ url: `/vendor/queues/${id}`, method: 'PATCH', data }, s.queue),
+  remove: (id) => request({ url: `/vendor/queues/${id}`, method: 'DELETE' },
+    z.object({ deleted: z.boolean() })),
   monitor: (id) => request({ url: `/vendor/queues/${id}/monitor` }, s.liveMonitor),
   tokens: (id, params) =>
     requestPage({ url: `/vendor/queues/${id}/tokens`, params }, s.queueToken),
-  /** action: start | pause | resume | close */
-  lifecycle: (id, action) =>
-    request({ url: `/vendor/queues/${id}/${action}`, method: 'POST' }, s.queue),
+  /** action: start | pause | resume | close. `data.provider_id` assigns the
+   * doctor for `start` - only that doctor (or an owner/manager) can then use
+   * the queue's Operator Console. */
+  lifecycle: (id, action, data) =>
+    request({ url: `/vendor/queues/${id}/${action}`, method: 'POST', data }, s.queue),
   callNext: (id) =>
     request({ url: `/vendor/queues/${id}/call-next`, method: 'POST' }, s.queueToken),
   walkIn: (id, data) =>
@@ -82,6 +96,16 @@ export const queues = {
       method: 'POST',
       data: { target_queue_id },
     }, s.queueToken),
+  /** One-time code + link for the assigned doctor to open this console. */
+  shareConsole: (id) =>
+    request({ url: `/vendor/queues/${id}/console/share`, method: 'POST' },
+      z.object({
+        queue_id: z.string(),
+        queue_name: z.string(),
+        doctor_name: z.string(),
+        code: z.string(),
+        expires_at: z.string(),
+      })),
 };
 
 // --- appointments -------------------------------------------------------
@@ -101,16 +125,28 @@ export const appointments = {
 };
 
 // --- end user -----------------------------------------------------------
+const vendorProfile = z.object({
+  id: z.string(),
+  company_name: z.string().nullish(),
+  slug: z.string().nullish(),
+  business_type: z.string().nullish(),
+  logo_url: z.string().nullish(),
+});
+
 export const discovery = {
-  vendors: (params) =>
-    requestPage({ url: '/vendors', params },
-      z.object({
+  vendors: (params) => requestPage({ url: '/vendors', params }, vendorProfile),
+  vendor: (tenantId) => request({ url: `/vendors/${tenantId}` }, vendorProfile),
+  branches: (tenantId) =>
+    request({ url: `/vendors/${tenantId}/branches` },
+      z.array(z.object({
         id: z.string(),
-        company_name: z.string().nullish(),
-        slug: z.string().nullish(),
-        business_type: z.string().nullish(),
-        logo_url: z.string().nullish(),
-      })),
+        name: z.string(),
+        phone: z.string().nullish(),
+        address: z.object({
+          line1: z.string().nullish(),
+          city: z.string().nullish(),
+        }).nullish(),
+      }))),
   services: (tenantId, branch_id) =>
     request({ url: `/vendors/${tenantId}/services`, params: { branch_id } },
       z.array(z.object({
@@ -151,6 +187,18 @@ export const publicQueue = {
       s.liveMonitor.partial({ current_token: true, next_token: true })),
 };
 
+// --- leads ----------------------------------------------------------------
+export const leads = {
+  // `data` is a FormData (file upload). The client's default JSON
+  // Content-Type header must be cleared here, or axios JSON-stringifies
+  // the FormData instead of sending it as multipart — the backend then
+  // sees no multipart boundary and every Form(...) field reads as missing.
+  create: (data) => request(
+    { url: '/leads', method: 'POST', data, headers: { 'Content-Type': undefined } },
+    s.lead,
+  ),
+};
+
 // --- billing ------------------------------------------------------------
 export const billing = {
   subscription: () =>
@@ -160,9 +208,20 @@ export const billing = {
         plan: z.record(z.unknown()).nullish(),
         tenant_status: z.string().nullish(),
       })),
+  /** Every plan a vendor can request to switch to, cheapest first. The
+   * trial plan drops out of this list once already used. */
+  plans: () => request({ url: '/vendor/plans' }, z.array(s.plan)),
+  /** For a trial plan this activates immediately (`activated: true`,
+   * no `checkout_url`) - every other plan returns a Stripe URL to redirect
+   * to instead, and stays unactivated until the webhook confirms payment. */
   checkout: (data) =>
     request({ url: '/vendor/checkout', method: 'POST', data },
-      z.object({ checkout_url: z.string(), session_id: z.string() })),
+      z.object({
+        checkout_url: z.string().nullable(),
+        session_id: z.string().nullable(),
+        activated: z.boolean().default(false),
+        trial_ends_at: z.string().nullable().optional(),
+      })),
 };
 
 // --- admin ----------------------------------------------------------------
@@ -171,10 +230,29 @@ export const admin = {
 
   vendors: (params) => requestPage({ url: '/admin/vendors', params }, s.adminVendor),
   vendor: (id) => request({ url: `/admin/vendors/${id}` }, s.adminVendorDetail),
+  /** Vendor stays 'pending' until they pay via the returned checkout_url. */
+  createVendor: (data) =>
+    request({ url: '/admin/vendors', method: 'POST', data },
+      s.adminVendor.extend({ checkout_url: z.string(), checkout_session_id: z.string() })),
+  /** A fresh payment link, in case the first one expired unused. */
+  vendorCheckout: (id) =>
+    request({ url: `/admin/vendors/${id}/checkout`, method: 'POST' },
+      z.object({ checkout_url: z.string(), checkout_session_id: z.string() })),
+  /** Only populated for a short window after the vendor's payment activates them. */
+  vendorCredentials: (id) =>
+    request({ url: `/admin/vendors/${id}/credentials` },
+      z.object({ email: z.string(), password: z.string() })),
   suspendVendor: (id) =>
     request({ url: `/admin/vendors/${id}/suspend`, method: 'POST' }, s.adminVendor),
   reactivateVendor: (id) =>
     request({ url: `/admin/vendors/${id}/reactivate`, method: 'POST' }, s.adminVendor),
+  /** Restricted to Super Admin. The server re-checks that `confirmCompanyName`
+   * matches the vendor's own name before soft-deleting it. */
+  deleteVendor: (id, confirmCompanyName) =>
+    request(
+      { url: `/admin/vendors/${id}`, method: 'DELETE', data: { confirm_company_name: confirmCompanyName } },
+      z.object({ deleted: z.boolean() }),
+    ),
   impersonateVendor: (id) =>
     request({ url: `/admin/vendors/${id}/impersonate`, method: 'POST' },
       z.object({
@@ -184,6 +262,19 @@ export const admin = {
         expires_in: z.number(),
         notice: z.string().nullish(),
       })),
+
+  leads: (params) => requestPage({ url: '/admin/leads', params }, s.adminLead),
+  /** Verifying a lead creates the vendor directly - same shape as createVendor,
+   * just scoped to the lead being converted. */
+  verifyLead: (id, data) =>
+    request({ url: `/admin/leads/${id}/verify`, method: 'POST', data },
+      s.adminVendor.extend({ checkout_url: z.string(), checkout_session_id: z.string(), lead_id: z.string() })),
+  rejectLead: (id) =>
+    request({ url: `/admin/leads/${id}/reject`, method: 'POST' }, s.adminLead),
+  /** Not JSON, so it bypasses `request()` - the caller turns this blob into
+   * an object URL to open the certificate in a new tab. */
+  leadCertificate: (id) =>
+    http.get(`/admin/leads/${id}/certificate`, { responseType: 'blob' }).then((r) => r.data),
 
   plans: (params) => requestPage({ url: '/admin/plans', params }, s.plan),
   createPlan: (data) => request({ url: '/admin/plans', method: 'POST', data }, s.plan),

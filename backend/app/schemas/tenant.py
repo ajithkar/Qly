@@ -44,6 +44,13 @@ class OrganizationUpdate(BaseModel):
     holidays: Optional[List[str]] = None  # ISO dates the org is closed
 
 
+class VendorDeleteRequest(BaseModel):
+    """The admin must retype the vendor's own company name - a second,
+    content-aware confirmation on top of the UI's own confirm step."""
+
+    confirm_company_name: str = Field(..., min_length=1, max_length=120)
+
+
 class BranchCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=120)
     phone: Optional[str] = Field(default=None, max_length=30)

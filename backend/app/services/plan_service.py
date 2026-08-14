@@ -10,6 +10,7 @@ from typing import Dict
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.errors import PlanLimitReached
+from app.core.security import ensure_utc, utcnow
 from app.repositories.catalog import (
     BranchRepository,
     PlanRepository,
@@ -57,6 +58,15 @@ class PlanService:
 
         A missing or None limit means unlimited.
         """
+        subscription = await self.subscriptions.get_for_tenant(tenant_id)
+        if subscription and subscription.get("stripe_status") == "trialing":
+            trial_ends_at = subscription.get("trial_ends_at")
+            if trial_ends_at and utcnow() >= ensure_utc(trial_ends_at):
+                raise PlanLimitReached(
+                    "Your free trial has ended. Upgrade to a paid plan to keep adding more.",
+                    details=[{"resource": resource, "reason": "trial_expired"}],
+                )
+
         plan = await self.current_plan(tenant_id)
         limit = plan.get(limit_key)
         if limit is None:

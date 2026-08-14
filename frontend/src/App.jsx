@@ -11,6 +11,11 @@ import { ApiError } from '@/api/client';
 
 import Landing from '@/pages/public/Landing';
 import Login from '@/pages/public/Login';
+import Demo from '@/pages/public/Demo';
+import ConsoleAccess from '@/pages/public/ConsoleAccess';
+import ForgotPassword from '@/pages/public/ForgotPassword';
+import ResetPassword from '@/pages/public/ResetPassword';
+import AcceptInvite from '@/pages/public/AcceptInvite';
 
 // Route-level code splitting: the operator console and its charts never load
 // for someone who only wants to check their place in a queue.
@@ -24,6 +29,7 @@ const Branches = lazy(() => import('@/pages/vendor/Branches'));
 const Appointments = lazy(() => import('@/pages/vendor/Appointments'));
 const Billing = lazy(() => import('@/pages/vendor/Billing'));
 const FindPlaces = lazy(() => import('@/pages/user/FindPlaces'));
+const VendorBooking = lazy(() => import('@/pages/user/VendorBooking'));
 const TrackToken = lazy(() => import('@/pages/user/TrackToken'));
 const GoogleCallback = lazy(() => import('@/pages/user/GoogleCallback'));
 const Profile = lazy(() => import('@/pages/user/Profile'));
@@ -68,7 +74,13 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<Landing />} />
                   <Route path="/login" element={<Login />} />
+                  <Route path="/demo" element={<Demo />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route path="/accept-invite" element={<AcceptInvite />} />
+                  <Route path="/console-access/:queueId" element={<ConsoleAccess />} />
                   <Route path="/find" element={<FindPlaces />} />
+                  <Route path="/vendors/:tenantId" element={<VendorBooking />} />
                   <Route path="/track/:tokenId" element={<TrackToken />} />
                   <Route path="/auth/google/callback" element={<GoogleCallback />} />
 
@@ -77,10 +89,14 @@ export default function App() {
                   </Route>
 
                   <Route element={<RequireAuth principalType="staff" />}>
+                    {/* Standalone: no sidebar/dashboard chrome, and further
+                        restricted server-side to the doctor assigned to the
+                        queue (or an owner/manager override). */}
+                    <Route path="/vendor/queues/:queueId/console" element={<OperatorConsole />} />
+
                     <Route path="/vendor" element={<VendorLayout />}>
                       <Route index element={<VendorDashboard />} />
                       <Route path="queues" element={<Queues />} />
-                      <Route path="queues/:queueId/console" element={<OperatorConsole />} />
                       <Route path="appointments" element={<Appointments />} />
                       <Route path="services" element={<Services />} />
                       <Route path="providers" element={<Providers />} />

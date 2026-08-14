@@ -71,6 +71,10 @@ class StaffRepository(BaseRepository):
     async def get_by_email(self, tenant_id: str, email: str) -> Optional[dict]:
         return await self.find_one({"email": email.lower()}, tenant_id)
 
+    async def get_by_provider_id(self, tenant_id: str, provider_id: str) -> Optional[dict]:
+        """The staff login (role=provider) linked to a catalog Provider record."""
+        return await self.find_one({"provider_id": provider_id, "role": "provider"}, tenant_id)
+
     async def get_by_email_any_tenant(self, email: str) -> Optional[dict]:
         return serialize(
             await self.collection.find_one({"email": email.lower(), "is_deleted": False})

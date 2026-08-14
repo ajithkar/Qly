@@ -17,6 +17,16 @@ class QueueCreate(BaseModel):
     max_tokens: Optional[int] = Field(default=None, ge=1, le=10000)
 
 
+class QueueLifecycleRequest(BaseModel):
+    """Body for POST /vendor/queues/{queue_id}/{action}.
+
+    `provider_id` is only meaningful for the `start` action - it assigns the
+    doctor whose Operator Console access is then restricted to this queue.
+    """
+
+    provider_id: Optional[str] = None
+
+
 class QueueUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=120)
     provider_id: Optional[str] = None

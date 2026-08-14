@@ -120,6 +120,25 @@ def require_permission(module: str, action: Action) -> Callable:
     return _guard
 
 
+def require_admin_role(*roles: str) -> Callable:
+    """Guard factory: require_admin_role("super_admin").
+
+    Narrower than require_permission - some actions must stay out of reach of
+    every admin role that happens to hold the matching permission, and only
+    open up to specific roles named here.
+    """
+    allowed = set(roles)
+
+    async def _guard(
+        admin: Dict[str, Any] = Depends(get_current_admin),
+    ) -> Dict[str, Any]:
+        if admin.get("role") not in allowed:
+            raise PermissionDenied("This action is restricted to Super Admins.")
+        return admin
+
+    return _guard
+
+
 def client_ip(request: Request) -> str:
     """Honour X-Forwarded-For because the app runs behind Nginx."""
     forwarded = request.headers.get("x-forwarded-for")

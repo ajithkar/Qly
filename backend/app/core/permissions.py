@@ -45,6 +45,7 @@ class AdminModule(str, Enum):
     NOTIFICATIONS = "admin_notifications"
     SETTINGS = "admin_settings"
     AUDIT = "admin_audit"
+    LEADS = "admin_leads"
 
 
 def perm(module: str, action: Action) -> str:
@@ -137,6 +138,8 @@ ADMIN_ROLE_PERMISSIONS: Dict[str, Set[str]] = {
         perm(AdminModule.DASHBOARD.value, Action.VIEW),
         perm(AdminModule.VENDORS.value, Action.VIEW),
         perm(AdminModule.PLANS.value, Action.VIEW),
+        perm(AdminModule.LEADS.value, Action.VIEW),
+        perm(AdminModule.LEADS.value, Action.UPDATE),
     },
     "marketing": (
         all_actions(AdminModule.CMS.value)

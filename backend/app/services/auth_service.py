@@ -33,6 +33,8 @@ from app.repositories.identity import (
     TenantRepository,
     UserRepository,
 )
+from app.repositories.queues import ConsoleAccessRepository
+from app.services.email_service import send_email
 
 logger = get_logger(__name__)
 
@@ -54,6 +56,7 @@ class AuthService:
         self.admins = AdminRepository(db)
         self.refresh = RefreshTokenRepository(db)
         self.plans = PlanRepository(db)
+        self.console_access = ConsoleAccessRepository(db)
 
     # ------------------------------------------------------------------
     # Vendor registration & login
@@ -117,6 +120,15 @@ class AuthService:
             owner["id"], "privacy", payload["accepted_privacy_version"]
         )
 
+        verify_url = f"{settings.FRONTEND_URL}/verify-email?token={raw_verification}"
+        await send_email(
+            email,
+            "Verify your Qly account",
+            "Welcome to Qly!\n\n"
+            f"Verify your email address to activate your account:\n{verify_url}\n\n"
+            "If you didn't request this, you can ignore this email.",
+        )
+
         logger.info("vendor_registered", extra={"tenant_id": tenant["id"]})
         return {
             "tenant_id": tenant["id"],
@@ -125,6 +137,60 @@ class AuthService:
             # Returned so the caller can email it. Never expose in production logs.
             "verification_token": raw_verification,
         }
+
+    async def create_vendor_by_admin(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Super Admin onboarding: creates the tenant and owner, but both stay
+        pending until the vendor completes the Stripe Checkout payment the
+        caller generates right after this. The owner has no password yet -
+        one is generated and emailed once the webhook confirms payment (see
+        `StripeService._provision_owner_if_pending`)."""
+        email = payload["email"].lower()
+
+        if await self.tenants.get_by_email(email):
+            raise Conflict("An account with that email already exists.", code="email_taken")
+        if await self.staff.get_by_email_any_tenant(email):
+            raise Conflict("An account with that email already exists.", code="email_taken")
+
+        plan = await self.plans.get_by_code(payload["plan_code"])
+        if not plan:
+            raise NotFound("Selected plan does not exist.")
+
+        base = slugify(payload["company_name"])
+        slug, suffix = base, 1
+        while await self.tenants.get_by_slug(slug):
+            slug = f"{base}-{suffix}"
+            suffix += 1
+
+        tenant = await self.tenants.create(
+            {
+                "company_name": payload["company_name"],
+                "slug": slug,
+                "owner_email": email,
+                "owner_name": payload["owner_name"],
+                "timezone": payload.get("timezone", "UTC"),
+                "currency": payload.get("currency", "USD"),
+                "language": "en",
+                "status": TenantStatus.PENDING.value,
+                "plan_code": plan["code"],
+            }
+        )
+
+        await self.staff.create(
+            {
+                "email": email,
+                "name": payload["owner_name"],
+                "password_hash": None,
+                "role": "owner",
+                "branch_id": None,
+                "custom_permissions": [],
+                "status": AccountStatus.PENDING.value,
+                "email_verified": False,
+            },
+            tenant["id"],
+        )
+
+        logger.info("vendor_created_by_admin", extra={"tenant_id": tenant["id"]})
+        return tenant
 
     async def verify_email(self, raw_token: str) -> dict:
         staff = await self.staff.get_by_verification_token(raw_token)
@@ -157,6 +223,28 @@ class AuthService:
             raise AuthenticationError(
                 "This organisation is suspended.", code="tenant_suspended"
             )
+
+        tokens = await self._issue_tokens(
+            subject=staff["id"],
+            principal_type=PrincipalType.STAFF.value,
+            tenant_id=staff["tenant_id"],
+            role=staff["role"],
+        )
+        return staff, tokens
+
+    async def login_via_console_code(self, queue_id: str, code: str) -> Tuple[dict, dict]:
+        """Passwordless entry point for a shared Operator Console code.
+
+        The code is single-use and tied to one queue; `consume` claims it
+        atomically so a leaked/guessed code cannot be replayed even if two
+        requests race."""
+        record = await self.console_access.consume(queue_id, hash_opaque_token(code))
+        if not record:
+            raise AuthenticationError("That code is invalid or has expired.", code="invalid_code")
+
+        staff = await self.staff.get_by_id_any_tenant(record["staff_id"])
+        if not staff or staff.get("status") == AccountStatus.SUSPENDED.value:
+            raise AuthenticationError("This account is no longer available.")
 
         tokens = await self._issue_tokens(
             subject=staff["id"],
@@ -201,6 +289,7 @@ class AuthService:
                 "name": payload["name"],
                 "role": payload["role"],
                 "branch_id": payload.get("branch_id"),
+                "provider_id": payload.get("provider_id"),
                 "custom_permissions": payload.get("custom_permissions", []),
                 "status": AccountStatus.PENDING.value,
                 "email_verified": False,
@@ -210,6 +299,14 @@ class AuthService:
             },
             tenant_id,
             actor_id,
+        )
+        invite_url = f"{settings.FRONTEND_URL}/accept-invite?token={raw_invite}"
+        await send_email(
+            email,
+            "You've been invited to join a team on Qly",
+            f"You've been invited to join as {payload['role']}.\n\n"
+            f"Accept your invite and set a password:\n{invite_url}\n\n"
+            f"This link expires in {INVITE_TTL_HOURS} hours.",
         )
         return {"staff_id": staff["id"], "invite_token": raw_invite}
 
@@ -245,6 +342,15 @@ class AuthService:
                     "reset_expires_at": utcnow() + timedelta(hours=RESET_TTL_HOURS),
                 },
             )
+            reset_url = f"{settings.FRONTEND_URL}/reset-password?token={raw}"
+            await send_email(
+                staff["email"],
+                "Reset your Qly password",
+                "We received a request to reset your password.\n\n"
+                f"Choose a new password:\n{reset_url}\n\n"
+                f"This link expires in {RESET_TTL_HOURS} hours. "
+                "If you didn't request this, you can ignore this email.",
+            )
             return {"sent": True, "reset_token": raw}
         return {"sent": True}
 
@@ -264,6 +370,27 @@ class AuthService:
         # Any existing session is invalidated after a password change.
         await self.refresh.revoke_all_for_subject(staff["id"])
         return {"reset": True}
+
+    async def change_password(
+        self, staff: Dict[str, Any], current_password: str, new_password: str
+    ) -> dict:
+        """Authenticated self-service change - also clears the forced
+        first-login flag set when a temp password was issued. Unlike
+        `reset_password`, this does not revoke other sessions: the caller is
+        already mid-session right after logging in with the password being
+        replaced, and revoking here would force a surprise logout on their
+        next token refresh."""
+        if not verify_password(current_password, staff.get("password_hash", "")):
+            raise AuthenticationError("Current password is incorrect.")
+        validate_password_strength(new_password)
+        await self.staff.set_tokens(
+            staff["id"],
+            {
+                "password_hash": hash_password(new_password),
+                "must_change_password": False,
+            },
+        )
+        return {"changed": True}
 
     # ------------------------------------------------------------------
     # End users (Google OAuth only)
@@ -376,8 +503,10 @@ class AuthService:
             "role": principal.get("role"),
             "tenant_id": principal.get("tenant_id"),
             "branch_id": principal.get("branch_id"),
+            "provider_id": principal.get("provider_id"),
             "permissions": permissions,
             "status": principal.get("status", AccountStatus.ACTIVE.value),
+            "must_change_password": bool(principal.get("must_change_password", False)),
         }
 
     async def _record_consent(self, subject_id: str, document: str, version: str) -> None:

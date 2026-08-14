@@ -17,6 +17,8 @@ from app.core.rate_limit import auth_rate_limit, login_guard
 from app.schemas.auth import (
     AcceptInviteRequest,
     AdminLoginRequest,
+    ChangePasswordRequest,
+    ConsoleAccessRequest,
     EmailVerificationRequest,
     ForgotPasswordRequest,
     LoginRequest,
@@ -86,16 +88,39 @@ async def login(
     return ok(tokens)
 
 
+@router.post("/auth/console-access")
+async def console_access(
+    payload: ConsoleAccessRequest,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: None = Depends(auth_rate_limit),
+) -> Dict[str, Any]:
+    """Redeem a shared Operator Console code - a passwordless login scoped to
+    whichever doctor the code was generated for."""
+    async with login_guard(f"console:{payload.queue_id}"):
+        staff, tokens = await AuthService(db).login_via_console_code(
+            payload.queue_id, payload.code
+        )
+    await AuditService(db).record(
+        tenant_id=staff["tenant_id"],
+        actor_id=staff["id"],
+        actor_email=staff["email"],
+        action="console_otp_login",
+        module="auth",
+        resource_id=payload.queue_id,
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return ok(tokens)
+
+
 @router.post("/auth/forgot-password")
 async def forgot_password(
     payload: ForgotPasswordRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _: None = Depends(auth_rate_limit),
 ) -> Dict[str, Any]:
-    result = await AuthService(db).request_password_reset(payload.email)
-    # The reset token is returned for the email layer to consume; it is not
-    # echoed to the client.
-    result.pop("reset_token", None)
+    await AuthService(db).request_password_reset(payload.email)
     return ok({"message": "If that email is registered, a reset link has been sent."})
 
 
@@ -104,6 +129,31 @@ async def reset_password(
     payload: ResetPasswordRequest, db: AsyncIOMotorDatabase = Depends(get_db)
 ) -> Dict[str, Any]:
     return ok(await AuthService(db).reset_password(payload.token, payload.new_password))
+
+
+@router.post("/auth/change-password")
+async def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    staff: Dict[str, Any] = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> Dict[str, Any]:
+    """Authenticated self-service change - also clears the forced first-login
+    flag set when a temp password was issued (see PrincipalResponse
+    .must_change_password)."""
+    result = await AuthService(db).change_password(
+        staff, payload.current_password, payload.new_password
+    )
+    await AuditService(db).record(
+        tenant_id=staff["tenant_id"],
+        actor_id=staff["id"],
+        actor_email=staff["email"],
+        action="change_password",
+        module="auth",
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return ok(result)
 
 
 # ------------------------------------------------------------ staff invites
@@ -115,7 +165,6 @@ async def invite_staff(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> Dict[str, Any]:
     result = await AuthService(db).invite_staff(tenant_id, payload.model_dump(), staff["id"])
-    result.pop("invite_token", None)
     return ok({"staff_id": result["staff_id"], "message": "Invitation sent."})
 
 

@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, UserCog } from 'lucide-react';
+import { Trash2, UserCog } from 'lucide-react';
 
 import { admin } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
 import { Badge } from '@/components/ui/Badge';
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
-import { ConfirmDialog } from '@/components/ui/Dialog';
+import { ConfirmDialog, Dialog } from '@/components/ui/Dialog';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { Field, Input } from '@/components/ui/Field';
 import { FullPageSpinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { formatDate } from '@/lib/cn';
@@ -19,11 +21,16 @@ const STATUS_TONE = { active: 'open', suspended: 'closed', pending: 'paused', ca
 
 export default function AdminVendorDetail() {
   const { vendorId } = useParams();
-  const { can, adoptTokens } = useAuth();
+  const { can, principal, adoptTokens } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [confirmImpersonate, setConfirmImpersonate] = useState(false);
+  // Deletion is gated by role, not permission - see require_admin_role on the
+  // backend. null | 'warn' (step 1) | 'type' (step 2, retype the name).
+  const [deleteStep, setDeleteStep] = useState(null);
+  const [deleteText, setDeleteText] = useState('');
+  const isSuperAdmin = principal?.role === 'super_admin';
 
   const query = useQuery({
     queryKey: ['admin', 'vendors', vendorId],
@@ -58,18 +65,27 @@ export default function AdminVendorDetail() {
     onError: (error) => toast.error(error.message),
   });
 
+  const deleteVendor = useMutation({
+    mutationFn: (confirmText) => admin.deleteVendor(vendorId, confirmText),
+    onSuccess: () => {
+      setDeleteStep(null);
+      toast.success('Vendor deleted');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'vendors'] });
+      navigate('/admin/vendors', { replace: true });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   if (query.isLoading) return <FullPageSpinner label="Loading vendor" />;
   if (query.isError) return <ErrorState error={query.error} onRetry={query.refetch} />;
 
   const { organisation: org, subscription, counts } = query.data;
   const canUpdate = can('admin_vendors:update');
+  const vendorLabel = org.company_name ?? org.slug ?? org.id;
 
   return (
     <div className="space-y-5">
-      <Link to="/admin/vendors" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        All vendors
-      </Link>
+      <BackLink to="/admin/vendors" label="All vendors" />
 
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -95,6 +111,15 @@ export default function AdminVendorDetail() {
           <Button variant="secondary" onClick={() => setConfirmImpersonate(true)}>
             <UserCog className="h-4 w-4" aria-hidden="true" />
             Impersonate owner
+          </Button>
+        </div>
+      )}
+
+      {isSuperAdmin && (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="danger" onClick={() => { setDeleteText(''); setDeleteStep('warn'); }}>
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Delete vendor
           </Button>
         </div>
       )}
@@ -147,6 +172,46 @@ export default function AdminVendorDetail() {
         confirmLabel="Impersonate"
         loading={impersonate.isPending}
       />
+
+      <ConfirmDialog
+        open={deleteStep === 'warn'}
+        onClose={() => setDeleteStep(null)}
+        onConfirm={() => setDeleteStep('type')}
+        title={`Delete "${vendorLabel}"?`}
+        description={`This vendor has ${counts.branches} branch(es), ${counts.providers} provider(s), ${counts.staff} staff member(s) and ${counts.appointments} appointment(s) on file. Deleting it removes it from the platform. You'll be asked to confirm once more.`}
+        confirmLabel="Continue"
+        variant="danger"
+      />
+
+      <Dialog
+        open={deleteStep === 'type'}
+        onClose={() => setDeleteStep(null)}
+        title="Confirm deletion"
+        description={`Type "${vendorLabel}" exactly to confirm. This cannot be undone from this screen.`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteStep(null)}>Cancel</Button>
+            <Button
+              variant="danger"
+              disabled={deleteText.trim() !== vendorLabel}
+              loading={deleteVendor.isPending}
+              onClick={() => deleteVendor.mutate(deleteText.trim())}
+            >
+              Delete vendor permanently
+            </Button>
+          </>
+        }
+      >
+        <Field label="Company name" htmlFor="delete-confirm-name">
+          <Input
+            id="delete-confirm-name"
+            value={deleteText}
+            onChange={(e) => setDeleteText(e.target.value)}
+            placeholder={vendorLabel}
+            autoComplete="off"
+          />
+        </Field>
+      </Dialog>
     </div>
   );
 }

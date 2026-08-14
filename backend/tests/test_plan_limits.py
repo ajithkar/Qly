@@ -79,3 +79,51 @@ async def test_soft_deleted_records_do_not_count_toward_limit(db, tenant_id, lim
     await repo.soft_delete_by_id(one["id"], tenant_id, "actor")
     # Freed a slot, so this should now succeed.
     await service.enforce_limit(tenant_id, "max_branches", "branches")
+
+
+# ------------------------------------------------------------------- trials
+async def test_expired_trial_blocks_new_resources_even_under_the_cap(db, tenant_id, limited_tenant):
+    """A trial that has run out must block growth even though the plan's own
+    numeric cap has plenty of headroom left."""
+    from datetime import timedelta
+
+    from app.core.security import utcnow
+
+    await db["subscriptions"].insert_one(
+        {
+            "tenant_id": tenant_id,
+            "plan_code": "starter",
+            "stripe_status": "trialing",
+            "trial_ends_at": utcnow() - timedelta(days=1),
+        }
+    )
+    service = PlanService(db)
+    with pytest.raises(PlanLimitReached) as exc:
+        await service.enforce_limit(tenant_id, "max_branches", "branches")
+    assert exc.value.details[0]["reason"] == "trial_expired"
+
+
+async def test_active_trial_still_enforces_the_plan_cap(db, tenant_id, limited_tenant):
+    """An unexpired trial is not a free pass - it's just a subscription state,
+    so the plan's own limits still apply underneath it."""
+    from datetime import timedelta
+
+    from app.core.security import utcnow
+    from app.repositories.catalog import BranchRepository
+
+    await db["subscriptions"].insert_one(
+        {
+            "tenant_id": tenant_id,
+            "plan_code": "starter",
+            "stripe_status": "trialing",
+            "trial_ends_at": utcnow() + timedelta(days=15),
+        }
+    )
+    service = PlanService(db)
+    repo = BranchRepository(db)
+    await repo.create({"name": "One", "timezone": "UTC"}, tenant_id, "actor")
+    await repo.create({"name": "Two", "timezone": "UTC"}, tenant_id, "actor")
+
+    with pytest.raises(PlanLimitReached) as exc:
+        await service.enforce_limit(tenant_id, "max_branches", "branches")
+    assert exc.value.details[0]["resource"] == "branches"

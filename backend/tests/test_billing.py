@@ -6,8 +6,9 @@ import time
 
 import pytest
 
-from app.core.errors import ValidationError
+from app.core.errors import Conflict, ValidationError
 from app.models.enums import TenantStatus
+from app.repositories.catalog import PlanRepository
 from app.services.stripe_service import StripeService, WebhookVerificationError
 
 SECRET = "whsec_test_secret"
@@ -209,3 +210,77 @@ async def test_unknown_event_type_is_ignored_safely(db, tenant_id, billing_setup
         {"id": "evt_unknown", "type": "some.future.event", "data": {"object": {}}}
     )
     assert result["status"] == "processed"
+
+
+# ----------------------------------------------------------- plan upgrade options
+async def test_list_active_plans_excludes_archived_and_sorts_by_price(db):
+    await db["plans"].insert_many(
+        [
+            {"code": "business", "name": "Business", "monthly_price": 99,
+             "archived": False, "is_deleted": False, "sort_order": 2},
+            {"code": "free", "name": "Free", "monthly_price": 0,
+             "archived": False, "is_deleted": False, "sort_order": 0},
+            {"code": "legacy", "name": "Legacy", "monthly_price": 19,
+             "archived": True, "is_deleted": False, "sort_order": 1},
+        ]
+    )
+    plans = await PlanRepository(db).list_active()
+    assert [p["code"] for p in plans] == ["free", "business"]
+
+
+# ----------------------------------------------------------------------- trial
+@pytest.fixture
+async def trial_setup(db, tenant_id):
+    await db["plans"].insert_one(
+        {
+            "code": "free",
+            "name": "1-Month Trial",
+            "monthly_price": 0,
+            "yearly_price": 0,
+            "max_branches": 1,
+            "archived": False,
+            "is_deleted": False,
+            "is_trial": True,
+        }
+    )
+    await db["tenants"].insert_one(
+        {
+            "_id": __import__("bson").ObjectId(tenant_id),
+            "company_name": "Trial Org",
+            "slug": "trial-org",
+            "owner_email": "owner@trial.local",
+            "status": TenantStatus.PENDING.value,
+            "plan_code": None,
+            "is_deleted": False,
+        }
+    )
+    return {"plan_code": "free"}
+
+
+async def test_trial_activates_immediately_without_stripe(db, tenant_id, trial_setup):
+    """No Stripe client is passed in - if this went anywhere near a real
+    checkout it would blow up with AttributeError, not just fail an assert."""
+    service = StripeService(db)
+    result = await service.create_checkout_session(tenant_id, "free")
+
+    assert result["activated"] is True
+    assert result["checkout_url"] is None
+    assert result["trial_ends_at"] is not None
+
+    tenant = await db["tenants"].find_one({"slug": "trial-org"})
+    assert tenant["status"] == TenantStatus.ACTIVE.value
+    assert tenant["plan_code"] == "free"
+    assert tenant["trial_used"] is True
+
+    subscription = await db["subscriptions"].find_one({"tenant_id": tenant_id})
+    assert subscription["stripe_status"] == "trialing"
+    assert subscription["trial_ends_at"] is not None
+
+
+async def test_trial_cannot_be_activated_twice(db, tenant_id, trial_setup):
+    service = StripeService(db)
+    await service.create_checkout_session(tenant_id, "free")
+
+    with pytest.raises(Conflict) as exc:
+        await service.create_checkout_session(tenant_id, "free")
+    assert exc.value.code == "trial_already_used"

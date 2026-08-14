@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import time
+from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -21,13 +23,18 @@ from pymongo.errors import DuplicateKeyError
 from app.core.config import settings
 from app.core.errors import AppError, Conflict, NotFound, ValidationError
 from app.core.logging import get_logger
-from app.core.security import utcnow
+from app.core.security import generate_temp_password, hash_password, utcnow
 from app.models.base import to_object_id
-from app.models.enums import TenantStatus
+from app.models.enums import AccountStatus, TenantStatus
 from app.repositories.catalog import PlanRepository, SubscriptionRepository
-from app.repositories.identity import TenantRepository
+from app.repositories.identity import StaffRepository, TenantRepository
+from app.services.email_service import send_email
 
 logger = get_logger(__name__)
+
+# How long an admin can view a freshly-activated vendor's generated
+# password from the admin UI before it disappears from Redis.
+VENDOR_CREDENTIALS_TTL_SECONDS = 60 * 60 * 24
 
 
 class WebhookVerificationError(AppError):
@@ -46,11 +53,15 @@ class StripeService:
     # Grace window before a past-due subscription suspends the tenant.
     DUNNING_GRACE_DAYS = 7
 
+    # Length of the one-time, no-payment trial (see _activate_trial).
+    TRIAL_PERIOD_DAYS = 30
+
     def __init__(self, db: AsyncIOMotorDatabase, client: Optional[Any] = None) -> None:
         self.db = db
         self.tenants = TenantRepository(db)
         self.plans = PlanRepository(db)
         self.subscriptions = SubscriptionRepository(db)
+        self.staff = StaffRepository(db)
         self._client = client
 
     # ------------------------------------------------------------------
@@ -108,6 +119,17 @@ class StripeService:
         plan = await self.plans.get_by_code(plan_code)
         if not plan:
             raise NotFound("Plan not found.")
+
+        if plan.get("is_trial"):
+            # No payment involved - and no repeated free rides, since a
+            # tenant can only ever activate a trial plan once.
+            if tenant.get("trial_used"):
+                raise Conflict(
+                    "You've already used your free trial. Choose a paid plan to continue.",
+                    code="trial_already_used",
+                )
+            return await self._activate_trial(tenant, plan)
+
         if billing_cycle not in ("monthly", "yearly"):
             raise ValidationError("Billing cycle must be 'monthly' or 'yearly'.")
 
@@ -123,14 +145,76 @@ class StripeService:
             plan_code=plan_code,
             billing_cycle=billing_cycle,
             amount=plan["yearly_price"] if billing_cycle == "yearly" else plan["monthly_price"],
-            currency=tenant.get("currency", "USD"),
+            currency=tenant.get("currency", "LKR"),
         )
         # Deliberately NOT activating anything here.
         logger.info(
             "checkout_session_created",
             extra={"tenant_id": tenant_id, "plan_code": plan_code},
         )
-        return {"checkout_url": session["url"], "session_id": session["id"]}
+        if tenant.get("owner_email"):
+            for_company = f" for {tenant['company_name']}" if tenant.get("company_name") else ""
+            await send_email(
+                tenant["owner_email"],
+                "Complete payment to activate your Qly account",
+                f"Hi {tenant.get('owner_name', 'there')},\n\n"
+                f"You're almost set up on Qly's {plan['name']} plan{for_company}.\n\n"
+                f"Complete your payment to activate your account:\n{session['url']}\n\n"
+                "This link will expire - if it does by the time you get to it, ask us for a new one.",
+            )
+        return {
+            "checkout_url": session["url"],
+            "session_id": session["id"],
+            "activated": False,
+            "trial_ends_at": None,
+        }
+
+    async def _activate_trial(self, tenant: Dict[str, Any], plan: Dict[str, Any]) -> Dict[str, Any]:
+        """Grant the one-time free trial immediately - there is no payment to
+        confirm, so unlike the paid path this is the source of truth itself
+        rather than something a webhook later validates."""
+        tenant_id = tenant["id"]
+        trial_ends_at = utcnow() + timedelta(days=self.TRIAL_PERIOD_DAYS)
+
+        await self.subscriptions.collection.update_one(
+            {"tenant_id": tenant_id},
+            {
+                "$set": {
+                    "tenant_id": tenant_id,
+                    "plan_code": plan["code"],
+                    "billing_cycle": "monthly",
+                    "stripe_customer_id": None,
+                    "stripe_subscription_id": None,
+                    "stripe_status": "trialing",
+                    "trial_ends_at": trial_ends_at,
+                    "past_due_since": None,
+                    "cancel_at_period_end": False,
+                    "activated_at": utcnow(),
+                    "updated_at": utcnow(),
+                },
+                "$setOnInsert": {"created_at": utcnow()},
+            },
+            upsert=True,
+        )
+        await self.tenants.update(
+            tenant_id,
+            {
+                "status": TenantStatus.ACTIVE.value,
+                "plan_code": plan["code"],
+                "trial_used": True,
+            },
+        )
+        logger.info(
+            "trial_activated",
+            extra={"tenant_id": tenant_id, "plan_code": plan["code"]},
+        )
+        await self._provision_owner_if_pending(tenant_id)
+        return {
+            "checkout_url": None,
+            "session_id": None,
+            "activated": True,
+            "trial_ends_at": trial_ends_at.isoformat(),
+        }
 
     # ------------------------------------------------------------------
     # Webhook processing
@@ -344,6 +428,53 @@ class StripeService:
         logger.info(
             "subscription_activated",
             extra={"tenant_id": tenant_id, "plan_code": plan_code},
+        )
+        await self._provision_owner_if_pending(tenant_id)
+
+    async def _provision_owner_if_pending(self, tenant_id: str) -> None:
+        """Vendors created directly by an admin have no password until
+        payment succeeds - this is the moment that generates one, emails it
+        to the owner, and stashes it in Redis briefly so an admin can also
+        copy it manually. Self-registered vendors already chose their own
+        password at sign-up, so `password_hash` is already set for them and
+        this is a no-op."""
+        owner = await self.staff.find_one(
+            {"role": "owner", "password_hash": None}, tenant_id
+        )
+        if not owner:
+            return
+
+        raw_password = generate_temp_password()
+        await self.staff.update(
+            owner["id"],
+            {
+                "password_hash": hash_password(raw_password),
+                "status": AccountStatus.ACTIVE.value,
+                "email_verified": True,
+                "must_change_password": True,
+            },
+            tenant_id,
+        )
+
+        try:
+            from app.db.redis_client import get_redis
+
+            await get_redis().set(
+                f"vendor_credentials:{tenant_id}",
+                json.dumps({"email": owner["email"], "password": raw_password}),
+                ex=VENDOR_CREDENTIALS_TTL_SECONDS,
+            )
+        except Exception:  # noqa: BLE001 - caching must never block activation
+            logger.warning("vendor_credentials_cache_failed", extra={"tenant_id": tenant_id})
+
+        login_url = f"{settings.FRONTEND_URL}/login"
+        await send_email(
+            owner["email"],
+            "Your Qly vendor account is ready",
+            "Your payment was received and your Qly account is now active.\n\n"
+            f"Login email: {owner['email']}\n"
+            f"Temporary password: {raw_password}\n\n"
+            f"Sign in at {login_url} and change your password after your first sign-in.",
         )
 
     # ------------------------------------------------------------------

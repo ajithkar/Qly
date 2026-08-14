@@ -13,6 +13,8 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.logging import get_logger
 from app.core.security import utcnow
+from app.repositories.identity import UserRepository
+from app.services.email_service import send_email
 from app.websocket.manager import ws_manager
 
 logger = get_logger(__name__)
@@ -48,11 +50,11 @@ class EmailChannel:
     enabled = True
 
     async def send(self, recipient, event, payload):  # noqa: ANN001
-        # Wire to your transactional email provider here.
-        logger.info(
-            "email_queued",
-            extra={"event": event, "to": recipient.get("email"), "channel": "email"},
-        )
+        email = recipient.get("email")
+        if not email:
+            logger.info("email_skipped_no_address", extra={"event": event})
+            return
+        await send_email(email, payload["title"], payload["body"])
 
 
 class SmsChannel:
@@ -112,7 +114,10 @@ class NotificationService:
         if event in self.HIGH_PRIORITY and recipient_id:
             prefs = await self._preferences(recipient_id)
             if not self._in_quiet_hours(prefs):
-                recipient = {"id": recipient_id, "email": prefs.get("email")}
+                # Preferences only ever held email_enabled/sms_enabled/quiet_hours -
+                # the actual address lives on the user record itself.
+                user = await UserRepository(self.db).get_by_id(recipient_id)
+                recipient = {"id": recipient_id, "email": (user or {}).get("email")}
                 for channel in self.channels:
                     if channel.enabled and prefs.get(f"{channel.name}_enabled", True):
                         await channel.send(recipient, event, doc)

@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CheckCircle2, PhoneCall, Pause, Play, Plus,
-  SkipForward, UserX, Radio, RadioTower,
+  CheckCircle2, LogOut, PhoneCall, Pause, Play, Plus,
+  ShieldAlert, SkipForward, Square, UserX, Radio, RadioTower,
 } from 'lucide-react';
 
 import { queues } from '@/api/endpoints';
 import { useAuth } from '@/auth/AuthContext';
 import { useQueueSocket } from '@/hooks/useQueueSocket';
 import { CallBoard, UpNext } from '@/components/CallBoard';
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Dialog } from '@/components/ui/Dialog';
+import { ConfirmDialog, Dialog } from '@/components/ui/Dialog';
 import { Field, Input, Select } from '@/components/ui/Field';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { FullPageSpinner } from '@/components/ui/Spinner';
@@ -36,10 +37,17 @@ import { formatMinutes, formatTime } from '@/lib/cn';
  */
 export default function OperatorConsole() {
   const { queueId } = useParams();
-  const { principal } = useAuth();
+  const { principal, logout } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const [endQueueOpen, setEndQueueOpen] = useState(false);
+
+  const signOut = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   const tenantId = principal?.tenant_id;
 
@@ -121,6 +129,7 @@ export default function OperatorConsole() {
     mutationFn: (action) => queues.lifecycle(queueId, action),
     onSuccess: (queue) => {
       toast.success(`Queue ${queue.status}`);
+      setEndQueueOpen(false);
       refresh();
     },
     onError: handleError,
@@ -151,19 +160,41 @@ export default function OperatorConsole() {
   }, [callNext]);
 
   if (monitorQuery.isLoading) return <FullPageSpinner label="Opening the console" />;
+
   if (monitorQuery.isError) {
-    return <ErrorState error={monitorQuery.error} onRetry={monitorQuery.refetch} />;
+    const forbidden = monitorQuery.error?.status === 403;
+    return (
+      <ConsoleShell onSignOut={signOut}>
+        {forbidden ? (
+          <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+            <div className="rounded-full border border-amber/25 bg-amber/10 p-3">
+              <ShieldAlert className="h-5 w-5 text-amber" aria-hidden="true" />
+            </div>
+            <h3 className="mt-4 text-sm font-semibold">Not your queue</h3>
+            <p className="mt-1 max-w-sm text-sm text-muted">
+              {monitorQuery.error.message}
+            </p>
+            <Link to="/vendor/queues" className="mt-5">
+              <Button variant="secondary" size="sm">Back to queues</Button>
+            </Link>
+          </div>
+        ) : (
+          <ErrorState error={monitorQuery.error} onRetry={monitorQuery.refetch} />
+        )}
+      </ConsoleShell>
+    );
   }
 
   const monitor = monitorQuery.data;
   const current = monitor.current_token;
   const isOpen = monitor.status === 'open';
+  const isClosed = monitor.status === 'closed';
   const waitingTokens = (waitingQuery.data?.data ?? []).filter(
     (token) => token.status === 'waiting',
   );
 
   return (
-    <div className="space-y-5">
+    <ConsoleShell onSignOut={signOut}>
       {/* Header: queue state and lifecycle controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -196,13 +227,24 @@ export default function OperatorConsole() {
               Pause
             </Button>
           ) : (
+            !isClosed && (
+              <Button
+                variant="secondary" size="sm"
+                onClick={() => lifecycle.mutate(monitor.status === 'paused' ? 'resume' : 'start')}
+                loading={lifecycle.isPending}
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+                {monitor.status === 'paused' ? 'Resume' : 'Start queue'}
+              </Button>
+            )
+          )}
+          {!isClosed && (
             <Button
-              variant="secondary" size="sm"
-              onClick={() => lifecycle.mutate(monitor.status === 'paused' ? 'resume' : 'start')}
-              loading={lifecycle.isPending}
+              variant="danger" size="sm"
+              onClick={() => setEndQueueOpen(true)}
             >
-              <Play className="h-4 w-4" aria-hidden="true" />
-              {monitor.status === 'paused' ? 'Resume' : 'Start queue'}
+              <Square className="h-4 w-4" aria-hidden="true" />
+              End queue
             </Button>
           )}
         </div>
@@ -211,7 +253,7 @@ export default function OperatorConsole() {
       {/* The board and the one action that matters */}
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
-          <CallBoard token={current} />
+          <CallBoard token={current} averageServiceMinutes={monitor.average_service_minutes} />
 
           <div className="flex flex-wrap gap-2">
             <Button
@@ -258,7 +300,9 @@ export default function OperatorConsole() {
 
           {!isOpen && (
             <p className="text-sm text-muted">
-              This queue is {monitor.status}. Start it before issuing or calling tokens.
+              {isClosed
+                ? 'This queue has ended. Remaining tokens were cancelled.'
+                : `This queue is ${monitor.status}. Start it before issuing or calling tokens.`}
             </p>
           )}
         </div>
@@ -349,9 +393,44 @@ export default function OperatorConsole() {
         onSubmit={(data) => walkIn.mutate(data)}
         loading={walkIn.isPending}
       />
+
+      <ConfirmDialog
+        open={endQueueOpen}
+        onClose={() => setEndQueueOpen(false)}
+        onConfirm={() => lifecycle.mutate('close')}
+        title="End this queue?"
+        description="This stops it from accepting new tokens. Anyone still waiting or being served will be cancelled, and this cannot be undone."
+        confirmLabel="End queue"
+        variant="danger"
+        loading={lifecycle.isPending}
+      />
+    </ConsoleShell>
+  );
+}
+
+/** Standalone shell: this page is deliberately kept outside VendorLayout
+ * (no sidebar/nav) so it can be handed to a doctor as a dedicated screen. */
+function ConsoleShell({ children, onSignOut }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-paper">
+      <header className="flex items-center justify-between border-b border-line bg-surface px-4 py-3">
+        <BackLink to="/vendor/queues" label="Queues" />
+        <Button variant="ghost" size="sm" onClick={onSignOut}>
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          Sign out
+        </Button>
+      </header>
+      <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <div className="space-y-5">{children}</div>
+      </main>
     </div>
   );
 }
+
+ConsoleShell.propTypes = {
+  children: PropTypes.node,
+  onSignOut: PropTypes.func.isRequired,
+};
 
 function WalkInDialog({ open, onClose, onSubmit, loading }) {
   const nameRef = useRef(null);

@@ -339,6 +339,94 @@ def test_calling_an_empty_queue_is_a_clean_404(client, signed_in):
     assert response.json()["error"]["code"] == "queue_empty"
 
 
+def test_edit_and_delete_a_queue(client, signed_in):
+    """The Queues dashboard's Edit and Delete actions, end to end."""
+    headers = signed_in["headers"]
+    branch_id = client.post(
+        "/api/v1/vendor/branches", headers=headers,
+        json={"name": "Branch One", "timezone": "UTC"},
+    ).json()["data"]["id"]
+    service_id = client.post(
+        "/api/v1/vendor/services", headers=headers,
+        json={"name": "Standard Service", "branch_id": branch_id, "duration_minutes": 5},
+    ).json()["data"]["id"]
+    queue_id = client.post(
+        "/api/v1/vendor/queues", headers=headers,
+        json={"name": "Main Queue", "branch_id": branch_id, "service_id": service_id},
+    ).json()["data"]["id"]
+
+    renamed = client.patch(
+        f"/api/v1/vendor/queues/{queue_id}", headers=headers,
+        json={"name": "Renamed Queue", "max_tokens": 50},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["data"]["name"] == "Renamed Queue"
+    assert renamed.json()["data"]["max_tokens"] == 50
+
+    # A queue still serving customers cannot be deleted out from under them.
+    client.post(f"/api/v1/vendor/queues/{queue_id}/start", headers=headers)
+    blocked = client.delete(f"/api/v1/vendor/queues/{queue_id}", headers=headers)
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "queue_still_active"
+
+    client.post(f"/api/v1/vendor/queues/{queue_id}/close", headers=headers)
+    deleted = client.delete(f"/api/v1/vendor/queues/{queue_id}", headers=headers)
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["data"]["deleted"] is True
+
+    # Soft-deleted queues drop out of both the list and direct lookup.
+    missing = client.get(f"/api/v1/vendor/queues/{queue_id}", headers=headers)
+    assert missing.status_code == 404
+    listed = client.get("/api/v1/vendor/queues", headers=headers).json()
+    assert queue_id not in [q["id"] for q in listed["data"]]
+
+    again = client.delete(f"/api/v1/vendor/queues/{queue_id}", headers=headers)
+    assert again.status_code == 404
+
+
+async def test_receptionist_cannot_delete_a_queue(client, signed_in):
+    """Only owner/manager get queues:delete - a receptionist gets a clean 403."""
+    headers = signed_in["headers"]
+    branch_id = client.post(
+        "/api/v1/vendor/branches", headers=headers,
+        json={"name": "Branch One", "timezone": "UTC"},
+    ).json()["data"]["id"]
+    service_id = client.post(
+        "/api/v1/vendor/services", headers=headers,
+        json={"name": "Standard Service", "branch_id": branch_id, "duration_minutes": 5},
+    ).json()["data"]["id"]
+    queue_id = client.post(
+        "/api/v1/vendor/queues", headers=headers,
+        json={"name": "Main Queue", "branch_id": branch_id, "service_id": service_id},
+    ).json()["data"]["id"]
+
+    await client.db["staff"].insert_one(
+        {
+            "tenant_id": signed_in["tenant_id"],
+            "email": "desk@demo-clinic.com", "name": "Front Desk",
+            "password_hash": hash_password(VENDOR_PASSWORD),
+            "role": "receptionist", "custom_permissions": [],
+            "status": "active", "email_verified": True, "is_deleted": False,
+        }
+    )
+    receptionist_token = client.post(
+        "/api/v1/auth/login",
+        json={"email": "desk@demo-clinic.com", "password": VENDOR_PASSWORD},
+    ).json()["data"]["access_token"]
+    receptionist_headers = {"Authorization": f"Bearer {receptionist_token}"}
+
+    blocked = client.delete(f"/api/v1/vendor/queues/{queue_id}", headers=receptionist_headers)
+    assert blocked.status_code == 403
+    assert blocked.json()["error"]["code"] == "permission_denied"
+
+    # But editing is within their role.
+    edited = client.patch(
+        f"/api/v1/vendor/queues/{queue_id}", headers=receptionist_headers,
+        json={"name": "Front Desk Renamed"},
+    )
+    assert edited.status_code == 200, edited.text
+
+
 # ------------------------------------------------------------ isolation
 async def test_another_tenant_cannot_read_your_queues(client, signed_in):
     """Tenant scope comes from the token, so a forged id changes nothing."""

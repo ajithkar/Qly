@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Package, Users, CreditCard,
-  ScrollText, Activity, Menu, X, Moon, Sun, LogOut, ShieldAlert,
+  ScrollText, Activity, Menu, X, Moon, Sun, LogOut,
 } from 'lucide-react';
 
 import { useAuth } from '@/auth/AuthContext';
@@ -10,6 +10,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/Button';
 import { ErrorBoundary } from '@/components/ui/ErrorState';
 import { cn } from '@/lib/cn';
+import logoIcon from '@/assets/logo-icon.png';
 
 /** Nav is filtered by permission, same rule as the vendor side: don't show a
  * door someone can't open. System Health has no module permission - every
@@ -47,10 +48,10 @@ export default function AdminLayout() {
         )}
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-signal" aria-hidden="true" />
+          <Link to="/" className="flex items-center gap-2.5">
+            <img src={logoIcon} alt="" className="h-8 w-8" />
             <span className="font-mono text-sm font-bold tracking-tight">Qly Admin</span>
-          </div>
+          </Link>
           <button
             className="lg:hidden"
             onClick={() => setMenuOpen(false)}
@@ -69,10 +70,10 @@ export default function AdminLayout() {
               onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-2.5 rounded-card px-3 py-2 text-sm transition-colors',
+                  'flex items-center gap-2.5 rounded-card border-l-2 px-3 py-2 text-sm transition-colors',
                   isActive
-                    ? 'bg-signal/10 font-medium text-signal'
-                    : 'text-muted hover:bg-paper hover:text-ink',
+                    ? 'border-signal bg-gradient-to-r from-signal/10 to-transparent font-medium text-signal'
+                    : 'border-transparent text-muted hover:bg-paper hover:text-ink',
                 )
               }
             >
@@ -118,7 +119,10 @@ export default function AdminLayout() {
           <button onClick={() => setMenuOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
-          <span className="font-mono text-sm font-bold">Qly Admin</span>
+          <Link to="/" className="flex items-center gap-2">
+            <img src={logoIcon} alt="" className="h-6 w-6" />
+            <span className="font-mono text-sm font-bold">Qly Admin</span>
+          </Link>
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">

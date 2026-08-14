@@ -21,7 +21,7 @@ const EMPTY_FORM = {
   max_branches: '', max_providers: '', max_staff: '', max_services: '',
   monthly_tokens: '', storage_mb: '',
   reports_access: true, export_access: true, api_access: false,
-  feature_flags: '', archived: false,
+  feature_flags: '', is_trial: false, archived: false,
 };
 
 const numOrNull = (value) => (value === '' || value === null ? null : Number(value));
@@ -75,7 +75,7 @@ export default function AdminPlans() {
       </div>
 
       <Card>
-        <CardHeader title="All plans" />
+        <CardHeader title="All plans" icon={Package} />
         {listQuery.isLoading && <SkeletonRows />}
         {listQuery.isError && <ErrorState error={listQuery.error} onRetry={listQuery.refetch} />}
         {listQuery.isSuccess && (
@@ -94,7 +94,10 @@ export default function AdminPlans() {
                 header: 'Plan',
                 render: (r) => (
                   <div>
-                    <p className="font-medium">{r.name}</p>
+                    <p className="font-medium">
+                      {r.name}
+                      {r.is_trial && <Badge tone="paused" className="ml-2">Trial</Badge>}
+                    </p>
                     <p className="font-mono text-xs text-muted">{r.code}</p>
                   </div>
                 ),
@@ -102,12 +105,12 @@ export default function AdminPlans() {
               {
                 key: 'monthly_price',
                 header: 'Monthly',
-                render: (r) => <span className="tabular">${r.monthly_price.toFixed(2)}</span>,
+                render: (r) => <span className="tabular">LKR {r.monthly_price.toLocaleString()}</span>,
               },
               {
                 key: 'yearly_price',
                 header: 'Yearly',
-                render: (r) => <span className="tabular">${r.yearly_price.toFixed(2)}</span>,
+                render: (r) => <span className="tabular">LKR {r.yearly_price.toLocaleString()}</span>,
               },
               {
                 key: 'limits',
@@ -166,7 +169,7 @@ function PlanDialog({ state, onClose, onCreate, onUpdate, loading }) {
         monthly_tokens: p.monthly_tokens ?? '', storage_mb: p.storage_mb ?? '',
         reports_access: p.reports_access, export_access: p.export_access,
         api_access: p.api_access, feature_flags: p.feature_flags.join(', '),
-        archived: p.archived,
+        is_trial: p.is_trial, archived: p.archived,
       });
     } else if (mode === 'create') {
       setForm(EMPTY_FORM);
@@ -197,6 +200,7 @@ function PlanDialog({ state, onClose, onCreate, onUpdate, loading }) {
     export_access: form.export_access,
     api_access: form.api_access,
     feature_flags: form.feature_flags.split(',').map((f) => f.trim()).filter(Boolean),
+    is_trial: form.is_trial,
     ...(mode === 'edit' ? { archived: form.archived } : {}),
   });
 
@@ -239,15 +243,15 @@ function PlanDialog({ state, onClose, onCreate, onUpdate, loading }) {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Monthly price" htmlFor="p-monthly">
+          <Field label="Monthly price (LKR)" htmlFor="p-monthly">
             <Input
-              id="p-monthly" type="number" min="0" step="0.01"
+              id="p-monthly" type="number" min="0" step="1"
               value={form.monthly_price} onChange={set('monthly_price', 'number')}
             />
           </Field>
-          <Field label="Yearly price" htmlFor="p-yearly">
+          <Field label="Yearly price (LKR)" htmlFor="p-yearly">
             <Input
-              id="p-yearly" type="number" min="0" step="0.01"
+              id="p-yearly" type="number" min="0" step="1"
               value={form.yearly_price} onChange={set('yearly_price', 'number')}
             />
           </Field>
@@ -307,6 +311,16 @@ function PlanDialog({ state, onClose, onCreate, onUpdate, loading }) {
             >
               <option value="1">Included</option>
               <option value="0">Not included</option>
+            </Select>
+          </Field>
+          <Field label="Free trial" htmlFor="p-trial" hint="One-time, no payment required">
+            <Select
+              id="p-trial"
+              value={form.is_trial ? '1' : '0'}
+              onChange={(e) => setForm((prev) => ({ ...prev, is_trial: e.target.value === '1' }))}
+            >
+              <option value="0">Regular plan</option>
+              <option value="1">Trial plan</option>
             </Select>
           </Field>
           {mode === 'edit' && (
