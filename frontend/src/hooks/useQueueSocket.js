@@ -28,8 +28,14 @@ export function useQueueSocket(queueId, tenantId, onMessage) {
       const token = tokenStore.access;
       if (!token) return;
 
-      const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const url = `${scheme}://${window.location.host}/ws/queues/${queueId}` +
+      // VITE_API_URL points at the backend's own origin once frontend and
+      // backend are deployed separately (e.g. Vercel + Render) - falling
+      // back to window.location only holds in dev, where Vite proxies /ws
+      // to localhost:8000 on the same origin as the page.
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const { protocol, host } = apiUrl ? new window.URL(apiUrl) : window.location;
+      const scheme = protocol === 'https:' ? 'wss' : 'ws';
+      const url = `${scheme}://${host}/ws/queues/${queueId}` +
         `?token=${encodeURIComponent(token)}&tenant_id=${encodeURIComponent(tenantId)}`;
 
       socket = new WebSocket(url);

@@ -6,10 +6,10 @@ Never hardcode secrets. All values below can be overridden via a .env file
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import List
+from typing import Annotated, List
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -46,7 +46,11 @@ class Settings(BaseSettings):
     RATE_LIMIT_AUTH_PER_MINUTE: int = 10
 
     # --- CORS ---
-    CORS_ORIGINS: List[str] = Field(
+    # NoDecode: without it, pydantic-settings tries to JSON-decode the raw
+    # env var before _split_origins ever runs, so a plain comma-separated
+    # value (the natural thing to paste into a Render/Vercel env var field)
+    # crashes at startup instead of being parsed.
+    CORS_ORIGINS: Annotated[List[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"]
     )
 
