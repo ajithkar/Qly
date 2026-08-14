@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Annotated[List[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"]
     )
+    # Optional regex for origins CORS_ORIGINS can't enumerate ahead of time,
+    # e.g. Vercel preview deploys (`https://qly-.*\.vercel\.app`). Unset by
+    # default so it never widens access unless deliberately configured.
+    CORS_ORIGIN_REGEX: str = ""
 
     # --- Frontend (base URL for links embedded in emails) ---
     FRONTEND_URL: str = "http://localhost:5173"
