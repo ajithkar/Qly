@@ -26,10 +26,12 @@ async def lifespan(_: FastAPI):
     await connect_to_mongo()
     await ensure_indexes()
     await connect_to_redis()
-    await ws_manager.start()
+    if settings.WEBSOCKETS_ENABLED:
+        await ws_manager.start()
     logger.info("application_started", extra={"environment": settings.ENVIRONMENT})
     yield
-    await ws_manager.stop()
+    if settings.WEBSOCKETS_ENABLED:
+        await ws_manager.stop()
     await close_redis_connection()
     await close_mongo_connection()
     logger.info("application_stopped")
@@ -58,7 +60,8 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(api_router, prefix=settings.API_V1_PREFIX)
-    app.include_router(ws_router)
+    if settings.WEBSOCKETS_ENABLED:
+        app.include_router(ws_router)
     return app
 
 

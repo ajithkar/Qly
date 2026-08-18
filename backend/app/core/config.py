@@ -8,7 +8,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Annotated, List
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -23,11 +23,15 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # development | staging | production
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
+    WEBSOCKETS_ENABLED: bool = True
 
     # --- Datastores ---
     MONGODB_URI: str = "mongodb://localhost:27017"
     MONGODB_DB_NAME: str = "qly"
-    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_URL: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias=AliasChoices("REDIS_URL", "KV_URL", "UPSTASH_REDIS_URL"),
+    )
 
     # --- Security / JWT ---
     JWT_SECRET_KEY: str = "change-me-in-production"

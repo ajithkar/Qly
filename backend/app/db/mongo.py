@@ -16,9 +16,24 @@ _db: Optional[AsyncIOMotorDatabase] = None
 
 async def connect_to_mongo() -> None:
     global _client, _db
-    _client = AsyncIOMotorClient(settings.MONGODB_URI, uuidRepresentation="standard")
+    _client = AsyncIOMotorClient(
+        settings.MONGODB_URI,
+        uuidRepresentation="standard",
+        serverSelectionTimeoutMS=10_000,
+        connectTimeoutMS=10_000,
+    )
     _db = _client[settings.MONGODB_DB_NAME]
-    await _client.admin.command("ping")
+    try:
+        await _client.admin.command("ping")
+    except Exception as exc:
+        logger.error(
+            "mongo_connection_failed",
+            extra={"error_type": type(exc).__name__, "error": str(exc)},
+        )
+        _client.close()
+        _client = None
+        _db = None
+        raise
     logger.info("mongo_connected", extra={"database": settings.MONGODB_DB_NAME})
 
 

@@ -134,7 +134,20 @@ async def ensure_indexes() -> None:
     db = get_database()
     for collection, models in INDEXES.items():
         if models:
-            await db[collection].create_indexes(models)
+            try:
+                await db[collection].create_indexes(models)
+            except Exception as exc:
+                # Mongo duplicate-key errors can contain document values, so
+                # log only safe structural details here.
+                logger.error(
+                    "index_creation_failed",
+                    extra={
+                        "collection": collection,
+                        "error_type": type(exc).__name__,
+                        "error_code": getattr(exc, "code", None),
+                    },
+                )
+                raise
     logger.info("indexes_ensured", extra={"collections": len(INDEXES)})
 
     # Backfill leads captured before the `status` field existed - the field
