@@ -25,6 +25,12 @@ const COPY = {
 };
 
 const COUNT_OPTIONS = ['1', '2–5', '6–15', '16+'];
+const PLAN_OPTIONS = [
+  { code: 'free', label: '1-Month Trial' },
+  { code: 'starter', label: 'Starter' },
+  { code: 'business', label: 'Business' },
+  { code: 'enterprise', label: 'Enterprise' },
+];
 const CERTIFICATE_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg'];
 const CERTIFICATE_MAX_MB = 5;
 
@@ -48,6 +54,7 @@ export default function Demo() {
       formData.append('email', values.email);
       formData.append('department_count', values.department_count ?? '');
       formData.append('branch_count', values.branch_count ?? '');
+      formData.append('plan_interest', values.plan_interest ?? '');
       formData.append('registration_certificate', values.registration_certificate[0]);
 
       const result = await leads.create(formData);
@@ -115,6 +122,15 @@ export default function Demo() {
                       </Select>
                     </Field>
                   </div>
+
+                  <Field label="Subscription plan" htmlFor="plan_interest" hint="You can change this later">
+                    <Select id="plan_interest" {...register('plan_interest')} defaultValue="">
+                      <option value="">Not sure yet</option>
+                      {PLAN_OPTIONS.map((plan) => (
+                        <option key={plan.code} value={plan.code}>{plan.label}</option>
+                      ))}
+                    </Select>
+                  </Field>
 
                   <Field label="Phone" htmlFor="phone" error={errors.phone?.message} required>
                     <Input
