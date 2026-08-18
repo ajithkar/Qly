@@ -14,6 +14,7 @@ class LeadCreateRequest(BaseModel):
     email: EmailStr
     department_count: Optional[str] = Field(default=None, max_length=20)
     branch_count: Optional[str] = Field(default=None, max_length=20)
+    plan_interest: Optional[str] = Field(default=None, max_length=40)
 
 
 class LeadResponse(BaseModel):

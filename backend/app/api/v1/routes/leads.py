@@ -36,6 +36,7 @@ async def create_lead(
     registration_certificate: UploadFile = File(...),
     department_count: Annotated[Optional[str], Form()] = None,
     branch_count: Annotated[Optional[str], Form()] = None,
+    plan_interest: Annotated[Optional[str], Form()] = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _: None = Depends(auth_rate_limit),
 ) -> Dict[str, Any]:
@@ -48,6 +49,7 @@ async def create_lead(
             email=email,
             department_count=department_count,
             branch_count=branch_count,
+            plan_interest=plan_interest,
         )
     except PydanticValidationError as exc:
         details = [
@@ -78,6 +80,7 @@ async def create_lead(
             f"Email: {payload.email}\n"
             f"Departments: {payload.department_count or '-'}\n"
             f"Branches: {payload.branch_count or '-'}\n"
+            f"Plan interest: {payload.plan_interest or '-'}\n"
             f"Registration certificate: {certificate_path}\n"
         )
         background_tasks.add_task(send_email, notify_to, subject, body)
